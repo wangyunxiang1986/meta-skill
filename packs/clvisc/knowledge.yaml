@@ -1,3 +1,5 @@
+description: "CLVisc: (3+1)D viscous relativistic hydrodynamics on GPU (OpenCL) for heavy-ion collisions — initial condition -> hydro evolution -> Cooper-Frye freeze-out -> particle spectra/flow."
+
 param_meaning:
   SQRTS: "质心系每核子对碰撞能量 (GeV)"
   ETAOS_YMIN: "剪切粘滞系数 eta/s 的最小值"

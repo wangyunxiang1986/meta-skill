@@ -1,3 +1,5 @@
+description: "LBT (Linear Boltzmann Transport): parton energy loss / jet quenching in the QGP. Compiled C++ (./lbt <jobid>); reads a hydro background + parton shower; outputs positive/negative.dat parton records."
+
 param_meaning:
   LBTswitch: "是否打开 LBT 输运 (1 才做介质传播; 0 近似自由流)"
   Kradiation: "介质诱导辐射开关 (打开增加辐射能损与 high-pT 压低; 需确认 radiation table 已读入)"

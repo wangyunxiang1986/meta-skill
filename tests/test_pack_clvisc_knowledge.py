@@ -19,6 +19,11 @@ class ClviscKnowledgeTest(unittest.TestCase):
         self.assertEqual(prof["tier1_output"], "hypersf.dat")
         self.assertEqual(prof["tier2_observable"], "dNchdeta")
 
+    def test_has_description(self):
+        kn = yaml.safe_load(KN.read_text(encoding="utf-8"))
+        self.assertIn("description", kn)
+        self.assertTrue(kn["description"].strip())
+
 
 if __name__ == "__main__":
     unittest.main()
