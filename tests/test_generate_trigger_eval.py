@@ -83,6 +83,26 @@ class EvalSeedTest(unittest.TestCase):
         self.assertEqual(e0["files"], [])
         self.assertTrue(e0["expected_output"])
 
+    def test_skips_intentless_demos_and_caps_at_three(self):
+        pack = _pack(demos=[
+            {"title": ""},                                # no intent/title -> skipped
+            {"intent": "do A"}, {"intent": "do B"},
+            {"intent": "do C"}, {"intent": "do D"},
+        ])
+        out = generate.render_evals(_scan(), pack)
+        self.assertEqual(len(out["evals"]), 3)            # up to 3 *usable*
+        self.assertEqual([e["id"] for e in out["evals"]], [1, 2, 3])   # contiguous ids
+        self.assertIn("do A", out["evals"][0]["prompt"])  # intent-less one skipped, not counted
+
+    def test_clean_generated_files_removes_evals(self):
+        # the real stale-cleanup contract (not just membership in the list)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp)
+            (out / "evals").mkdir()
+            (out / "evals" / "evals.json").write_text("OLD", encoding="utf-8")
+            generate.clean_generated_files(out)
+            self.assertFalse((out / "evals" / "evals.json").exists())
+
     def test_from_intent_rules_when_no_demos(self):
         pack = _pack(intent_rules=[{"match": ["scan coupling"]}])
         out = generate.render_evals(_scan(), pack)

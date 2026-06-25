@@ -562,10 +562,10 @@ def render_evals(scan: Dict[str, object], pack: Optional[Dict]) -> Dict[str, obj
     generic prompt. The engine names no model."""
     knowledge = (pack or {}).get("knowledge") or {}
     evals: List[Dict] = []
-    for demo in (knowledge.get("demos") or [])[:3]:
-        intent = str(demo.get("intent") or demo.get("title") or "").strip()
-        if not intent:
-            continue
+    usable = [d for d in (knowledge.get("demos") or [])
+              if str(d.get("intent") or d.get("title") or "").strip()]
+    for demo in usable[:3]:                              # up to 3 *usable* demos
+        intent = str(demo.get("intent") or demo.get("title")).strip()
         prompt = f"Using this skill, {intent}."
         args = demo.get("args") or {}
         if args:
