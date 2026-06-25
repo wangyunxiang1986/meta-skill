@@ -12,6 +12,7 @@ import re
 import shutil
 import string
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -122,9 +123,18 @@ def _apply_edits(text, edits, output_key, output_value):
     return text
 
 
-def _find(run_root, name):
-    hits = list(Path(run_root).rglob(name))
-    return next((p for p in hits if p.is_file() and p.stat().st_size > 0), None)
+def _find(run_root, name, newer_than=None):
+    """First non-empty file named ``name`` under ``run_root``. When
+    ``newer_than`` is given, skip files older than it -- a stale output from a
+    previous run (or a pre-existing file in the source tree) must not be
+    mistaken for output this run produced."""
+    for p in Path(run_root).rglob(name):
+        if not (p.is_file() and p.stat().st_size > 0):
+            continue
+        if newer_than is not None and p.stat().st_mtime < newer_than:
+            continue
+        return p
+    return None
 
 
 def _load_extractors(path):
@@ -364,6 +374,8 @@ def main():
         if not _run_step(profile["prepare"], cwd, ctx, log, "prepare", report):
             _write(report, work, args.run_profile)
             return 0
+    run_start = time.time()
+    run_failed = False
     try:
         with open(log, "a") as fh:
             fh.write("\n$ [run] " + " ".join(argv) + "\n")
@@ -371,11 +383,21 @@ def main():
                                   stdout=fh, stderr=subprocess.STDOUT, timeout=3600)
         if proc.returncode != 0:
             report["blockers"].append(f"run exited {proc.returncode}; see {log}")
+            run_failed = True
     except Exception as exc:
         report["blockers"].append(f"run failed: {exc}")
-    t1 = _find(out_root, profile["tier1_output"]) or _find(cwd, profile["tier1_output"])
+        run_failed = True
+    if run_failed:                              # hard stop: a failed run never reaches T1,
+        _write(report, work, args.run_profile)  # so it is never recorded as a known-good run
+        return 0
+    # only count an output this run actually produced (mtime >= run start, with a
+    # small tolerance for coarse filesystem mtime granularity)
+    fresh = run_start - 2.0
+    t1 = _find(out_root, profile["tier1_output"], fresh) \
+        or _find(cwd, profile["tier1_output"], fresh)
     if t1 is None:
-        report["blockers"].append(f"tier1 output {profile['tier1_output']} missing/empty")
+        report["blockers"].append(f"tier1 output {profile['tier1_output']} missing/empty "
+                                  f"(or stale -- not produced by this run)")
         _write(report, work, args.run_profile)
         return 0
     report["tier1_output"] = str(t1)

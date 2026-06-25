@@ -261,6 +261,63 @@ class RunLauncherTest(unittest.TestCase):
             self.assertEqual((work / "run" / "seen.txt").read_text(encoding="utf-8"),
                              "/tmp/my_data")
 
+    def test_failed_run_not_counted_as_tier1(self):
+        # Finding 1: a non-zero run exit must be a hard stop. A pre-existing
+        # tier1_output (here written by prepare) must NOT make T1 "reached" --
+        # otherwise a failed run gets logged as known-good in verified-runs.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "proj"
+            (root / ".git").mkdir(parents=True)
+            profile = {
+                "run_in": "work",
+                "prepare": ["python3 -c \"open('out.dat','w').write('stale')\""],
+                "command_argv": ["python3", "-c", "import sys; sys.exit(3)"],
+                "tier1_output": "out.dat",
+            }
+            pf = pathlib.Path(tmp) / "run_profile.json"
+            pf.write_text(json.dumps(profile), encoding="utf-8")
+            work = pathlib.Path(tmp) / "work"
+            proc = subprocess.run(
+                [sys.executable, str(LAUNCHER), "--project-root", str(root),
+                 "--work-dir", str(work), "--run-profile", str(pf), "--max-tier", "1"],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            self.assertEqual(proc.returncode, 0, proc.stdout)
+            report = json.loads((work / "verification-report.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["tier_reached"], 0, report)
+            self.assertTrue(any("exited 3" in b for b in report["blockers"]), report["blockers"])
+
+    def test_stale_output_not_counted_as_fresh_tier1(self):
+        # Finding 2: run exits 0 but produces nothing; a stale tier1_output left
+        # in the run cwd by a previous run must not be mistaken for this run's
+        # output (freshness by mtime).
+        import os
+        import time
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "proj"
+            (root / ".git").mkdir(parents=True)
+            work = pathlib.Path(tmp) / "work"
+            runcwd = work / "run"
+            runcwd.mkdir(parents=True)
+            stale = runcwd / "out.dat"
+            stale.write_text("stale", encoding="utf-8")
+            old = time.time() - 100
+            os.utime(stale, (old, old))
+            profile = {
+                "run_in": "work",
+                "command_argv": ["python3", "-c", "pass"],   # exit 0, writes nothing
+                "tier1_output": "out.dat",
+            }
+            pf = pathlib.Path(tmp) / "run_profile.json"
+            pf.write_text(json.dumps(profile), encoding="utf-8")
+            proc = subprocess.run(
+                [sys.executable, str(LAUNCHER), "--project-root", str(root),
+                 "--work-dir", str(work), "--run-profile", str(pf), "--max-tier", "1"],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            self.assertEqual(proc.returncode, 0, proc.stdout)
+            report = json.loads((work / "verification-report.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["tier_reached"], 0, report)
+            self.assertTrue(any("missing" in b for b in report["blockers"]), report["blockers"])
+
     def test_write_verified_run_records_into_skill(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location("gen_launcher", LAUNCHER)
