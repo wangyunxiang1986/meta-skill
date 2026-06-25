@@ -117,7 +117,10 @@ def _apply_edits(text, edits, output_key, output_value):
     for key, value in edits.items():
         pattern = re.compile(r"(?m)^(\s*" + re.escape(key) + r"\s*=).*$")
         if pattern.search(text):
-            text = pattern.sub(r"\1 " + str(value), text)
+            # replacement via a function so the value is literal -- a str
+            # replacement would interpret \1, \g<>, \n, \t etc. in the value
+            # (e.g. a Windows path or any value containing a backslash)
+            text = pattern.sub(lambda m, v=value: m.group(1) + " " + str(v), text)
         else:
             text += f"\n{key} = {value}\n"
     return text
@@ -416,8 +419,14 @@ def main():
         ex = _load_extractors(args.extractors)
         result = ex.extract(obs, str(t1.parent), str(work / "analysis"))
         report["observable"] = result
-        report["plot"] = result.get("plot")
-        report["tier_reached"] = 2
+        # extractors signal graceful failure by returning {"error": ...} rather
+        # than raising; that is NOT a reached tier (mirrors the T1 hard stop).
+        if isinstance(result, dict) and "error" not in result:
+            report["plot"] = result.get("plot")
+            report["tier_reached"] = 2
+        else:
+            err = result.get("error") if isinstance(result, dict) else "extractor returned non-dict"
+            report["blockers"].append(f"extract produced no usable observable: {err}")
     except Exception as exc:
         report["blockers"].append(f"extract failed: {exc}")
     _write(report, work, args.run_profile)

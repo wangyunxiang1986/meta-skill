@@ -318,6 +318,81 @@ class RunLauncherTest(unittest.TestCase):
             self.assertEqual(report["tier_reached"], 0, report)
             self.assertTrue(any("missing" in b for b in report["blockers"]), report["blockers"])
 
+    def test_t2_extractor_error_not_counted_as_success(self):
+        # A2: an extractor that gracefully returns {"error": ...} (e.g. the file
+        # exists but has no usable rows) must NOT count as T2 reached.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "proj"
+            (root / ".git").mkdir(parents=True)
+            ext = pathlib.Path(tmp) / "extractors.py"
+            ext.write_text(
+                "def extract(observable, run_dir, out_dir):\n"
+                "    return {'observable': observable, 'error': 'no rows parsed'}\n",
+                encoding="utf-8")
+            profile = {
+                "run_in": "work",
+                "command_argv": ["python3", "-c", "open('out.dat','w').write('1 2 3')"],
+                "tier1_output": "out.dat",
+                "tier2_observable": "dNdpT",
+            }
+            pf = pathlib.Path(tmp) / "run_profile.json"
+            pf.write_text(json.dumps(profile), encoding="utf-8")
+            work = pathlib.Path(tmp) / "work"
+            proc = subprocess.run(
+                [sys.executable, str(LAUNCHER), "--project-root", str(root),
+                 "--work-dir", str(work), "--run-profile", str(pf),
+                 "--extractors", str(ext), "--max-tier", "2"],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            self.assertEqual(proc.returncode, 0, proc.stdout)
+            report = json.loads((work / "verification-report.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["tier_reached"], 1, report)        # T1, not T2
+            self.assertTrue(any("no rows parsed" in b or "observable" in b
+                                for b in report["blockers"]), report["blockers"])
+
+    def test_t2_successful_extractor_reaches_tier2(self):
+        # Regression: a genuine extractor (dict, no 'error') still reaches T2.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "proj"
+            (root / ".git").mkdir(parents=True)
+            ext = pathlib.Path(tmp) / "extractors.py"
+            ext.write_text(
+                "import os\n"
+                "def extract(observable, run_dir, out_dir):\n"
+                "    os.makedirs(out_dir, exist_ok=True)\n"
+                "    p = os.path.join(out_dir, 'plot.png'); open(p, 'w').write('x')\n"
+                "    return {'observable': observable, 'values': {'n': 3}, 'plot': p}\n",
+                encoding="utf-8")
+            profile = {
+                "run_in": "work",
+                "command_argv": ["python3", "-c", "open('out.dat','w').write('1 2 3')"],
+                "tier1_output": "out.dat",
+                "tier2_observable": "dNdpT",
+            }
+            pf = pathlib.Path(tmp) / "run_profile.json"
+            pf.write_text(json.dumps(profile), encoding="utf-8")
+            work = pathlib.Path(tmp) / "work"
+            proc = subprocess.run(
+                [sys.executable, str(LAUNCHER), "--project-root", str(root),
+                 "--work-dir", str(work), "--run-profile", str(pf),
+                 "--extractors", str(ext), "--max-tier", "2"],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            self.assertEqual(proc.returncode, 0, proc.stdout)
+            report = json.loads((work / "verification-report.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["tier_reached"], 2, report)
+            self.assertEqual(report["blockers"], [])
+
+    def test_apply_edits_value_with_escape_is_literal(self):
+        # B2: a config value containing a backslash (e.g. a Windows path, or
+        # here \t) must be written literally, not interpreted as a regex
+        # replacement escape.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("gen_launcher", LAUNCHER)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        out = mod._apply_edits("path = old\nkeep = 1\n", {"path": "a\\tb"}, None, None)
+        self.assertIn("path = a\\tb", out)     # literal backslash-t, not a TAB
+        self.assertIn("keep = 1", out)
+
     def test_write_verified_run_records_into_skill(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location("gen_launcher", LAUNCHER)
