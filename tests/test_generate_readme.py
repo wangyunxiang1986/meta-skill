@@ -71,6 +71,26 @@ class ReadmeInstallFilterTest(unittest.TestCase):
         self.assertNotIn("src/foo", text)         # path dropped
         self.assertEqual(text.count("- gsl"), 1)  # deduped
 
+    def test_pack_run_profile_build_step_surfaces(self):
+        # When the structural scanner detects no build file but the pack's run
+        # profile declares a build step, the Installation section must still show
+        # it -- otherwise the generated README documents a code that won't run.
+        scan = _scan(build_files=[], build_targets=[])
+        knowledge = {"run_profiles": {"minimal": {"build": ["make"]}}}
+        text = "\n".join(generate._readme_install(scan, knowledge))
+        self.assertIn("make", text)
+
+    def test_pack_build_placeholder_steps_are_not_dumped(self):
+        # Launcher-internal scratch-build steps (with {work}/{root} placeholders
+        # or absolute paths) are not user install instructions; drop them.
+        scan = _scan(build_files=[], build_targets=[])
+        knowledge = {"run_profiles": {"minimal": {"build": [
+            "mkdir -p {work}/build", "cp {root}/*.cpp {work}/build/",
+            "make -C {work}/build"]}}}
+        text = "\n".join(generate._readme_install(scan, knowledge))
+        self.assertNotIn("{work}", text)
+        self.assertNotIn("{root}", text)
+
     def test_no_dependencies_block_when_all_prose(self):
         scan = _scan(dependencies=["1. Install OpenCL", "2. Download Anaconda"],
                      build_files=["Makefile"])
@@ -142,6 +162,21 @@ class GenerateWritesReadmeTest(unittest.TestCase):
             self.assertIn("## Usage", readme.read_text(encoding="utf-8"))
             self.assertEqual(report["readme_status"], "missing")
 
+    def test_generate_removes_stale_readme_when_now_ok(self):
+        # A previously-generated README must be cleaned when a later scan is ok
+        # (clean_generated_files), not left behind as misleading documentation.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "Demo"
+            root.mkdir()
+            out = pathlib.Path(tmp) / "skill"
+            stale = out / "references" / "generated-README.md"
+            stale.parent.mkdir(parents=True)
+            stale.write_text("OLD GENERATED README", encoding="utf-8")
+            scan = self._scan_missing(root)
+            scan["readme_path"] = "README.md"        # now present + consistent -> ok
+            generate.generate(scan, None, out)
+            self.assertFalse(stale.exists())
+
     def test_generate_skips_readme_when_ok(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp) / "Demo"
@@ -152,6 +187,26 @@ class GenerateWritesReadmeTest(unittest.TestCase):
             report = generate.generate(scan, None, out)
             self.assertFalse((out / "references" / "generated-README.md").exists())
             self.assertEqual(report["readme_status"], "ok")
+
+
+class ReadmeSourceTargetTest(unittest.TestCase):
+    def test_missing_and_absent_writes_readme_md(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(generate.readme_source_target("missing", tmp),
+                             pathlib.Path(tmp) / "README.md")
+
+    def test_missing_but_readme_exists_writes_generated(self):
+        # The defensive branch: status says missing yet a README.md is present
+        # (e.g. it appeared after the scan). Must NOT clobber it.
+        with tempfile.TemporaryDirectory() as tmp:
+            (pathlib.Path(tmp) / "README.md").write_text("MINE", encoding="utf-8")
+            self.assertEqual(generate.readme_source_target("missing", tmp),
+                             pathlib.Path(tmp) / "README.generated.md")
+
+    def test_problematic_writes_generated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(generate.readme_source_target("problematic", tmp),
+                             pathlib.Path(tmp) / "README.generated.md")
 
 
 class IntoSourceCliTest(unittest.TestCase):

@@ -15,7 +15,7 @@ _LOCATORS = {
 
 def _find(run_dir, name):
     hits = glob.glob(os.path.join(run_dir, "**", name), recursive=True)
-    return hits[0] if hits else None
+    return sorted(hits)[0] if hits else None      # deterministic pick across subdirs
 
 
 def extract(observable, run_dir, out_dir):

@@ -32,12 +32,20 @@ def _find(run_dir, name):
 
 
 def _load_pt(path):
-    """Return pT = sqrt(px^2 + py^2) for every parton row in positive.dat."""
-    px, py = [], []
+    """Return (pT array, n_events) for a parton record file.
+
+    pT = sqrt(px^2 + py^2). ``# event_id count`` lines separate events; the
+    event count is needed for per-event normalization so that scan points with
+    different event counts stay comparable. A file with no separators is one
+    event."""
+    px, py, n_events = [], [], 0
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
             s = line.strip()
-            if not s or s.startswith("#"):
+            if not s:
+                continue
+            if s.startswith("#"):
+                n_events += 1
                 continue
             parts = s.split()
             if len(parts) < 5:
@@ -49,7 +57,7 @@ def _load_pt(path):
                 continue
     px = np.asarray(px)
     py = np.asarray(py)
-    return np.sqrt(px * px + py * py)
+    return np.sqrt(px * px + py * py), max(n_events, 1)
 
 
 def extract(observable, run_dir, out_dir):
@@ -58,11 +66,14 @@ def extract(observable, run_dir, out_dir):
     pos_path = _find(run_dir, "positive.dat")
     if not pos_path:
         return {"observable": observable, "error": "positive.dat not found"}
-    pt_pos = _load_pt(pos_path)
+    pt_pos, n_events = _load_pt(pos_path)
     if pt_pos.size == 0:
         return {"observable": observable, "error": "no positive parton rows parsed"}
     neg_path = _find(run_dir, "negative.dat")
-    pt_neg = _load_pt(neg_path) if neg_path else np.array([])
+    if neg_path:
+        pt_neg, _ = _load_pt(neg_path)
+    else:
+        pt_neg = np.array([])
 
     os.makedirs(out_dir, exist_ok=True)
     pt_hi = max(20.0, float(np.percentile(pt_pos, 99)))
@@ -72,29 +83,37 @@ def extract(observable, run_dir, out_dir):
     hp, _ = np.histogram(pt_pos, bins=edges)
     hn, _ = np.histogram(pt_neg, bins=edges) if pt_neg.size else (np.zeros_like(hp), edges)
     net = hp - hn                                   # positive minus negative (recoil holes)
-    dndpt_net = net / widths
+    # per-event normalization: dN/dpT per event, comparable across scan points
+    # with different event counts (e.g. an alphas scan changing ncall)
+    dndpt_net = net / widths / n_events
     pos_mask = dndpt_net > 0                         # log axis: only physical (net>0) bins
 
     png = os.path.join(out_dir, "dNdpT_parton.png")
     plt.figure()
     plt.semilogy(centers[pos_mask], dndpt_net[pos_mask], "o-", label="net (pos - neg)")
-    plt.semilogy(centers, np.maximum(hp / widths, 1e-12), "--", color="0.7",
+    plt.semilogy(centers, np.maximum(hp / widths / n_events, 1e-12), "--", color="0.7",
                  label="positive only (ref)")
     plt.xlabel("pT [GeV]")
-    plt.ylabel("dN/dpT (parton, arb. norm.)")
+    plt.ylabel("(1/N_ev) dN/dpT (parton)")
     plt.title("LBT net parton pT spectrum (positive - negative)")
     plt.legend()
     plt.savefig(png)
     plt.close()
+    values = {
+        "n_events": int(n_events),
+        "n_positive": int(pt_pos.size),
+        "n_negative": int(pt_neg.size),
+        "n_net": int(pt_pos.size - pt_neg.size),
+        "net_per_event": float((pt_pos.size - pt_neg.size) / n_events),
+        "pt_max": float(pt_pos.max()),
+        "nonpositive_net_bins": int(np.sum(~pos_mask)),
+    }
+    if not neg_path:
+        values["warning"] = ("negative.dat missing -- spectrum is positive-only, "
+                             "NOT net-subtracted")
     return {
         "observable": observable,
-        "values": {
-            "n_positive": int(pt_pos.size),
-            "n_negative": int(pt_neg.size),
-            "n_net": int(pt_pos.size - pt_neg.size),
-            "pt_max": float(pt_pos.max()),
-            "nonpositive_net_bins": int(np.sum(~pos_mask)),
-        },
+        "values": values,
         "plot": png,
         "source": pos_path,
         "negative_source": neg_path,

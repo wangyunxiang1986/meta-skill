@@ -65,11 +65,19 @@ pack_parameters:
   - { name: netahydro, default: "33", source: "LBTinput.txt" }
   - { name: dtauhydro, default: "0.4", source: "LBTinput.txt" }
 
-# Pack-supplied outputs: scanner detects none for this C++ code, so declare them here.
+# Pack-supplied outputs: scanner detects none for this C++ code, so declare them
+# here. Only the files the LBT binary itself writes (main.cpp:60-63) belong here;
+# downstream-stage artifacts are listed separately below so the engine does not
+# expect the minimal run to produce them.
 pack_outputs:
   - { file: "positive.dat", source: "main.cpp" }
   - { file: "negative.dat", source: "main.cpp" }
+
+# Produced by separate downstream stages, NOT by the minimal LBT run. Documented
+# for the agent's awareness; not part of the run-output contract.
+downstream_artifacts:
   - { file: "output_validation.json", source: "LBTmodel validate" }
+  - { file: "data_catalog.md", source: "LBT-data-catalog" }
   - { file: "hadrons_*.dat", source: "ColorlessHadronization" }
   - { file: "charged_hadron_spectrum_3d.npz", source: "downstream analysis" }
 

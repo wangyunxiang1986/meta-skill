@@ -166,7 +166,13 @@ def _resolve_inputs(decl, cli_inputs):
 
 def _run_step(cmds, cwd, ctx, log, label, report):
     """Run a list of commands (string -> shell; list -> argv) in cwd with
-    {placeholder} substitution. Non-zero exit -> blocker. Returns ok bool."""
+    {placeholder} substitution. Non-zero exit -> blocker. Returns ok bool.
+
+    Trust boundary: string-form steps run via the shell after substitution, so
+    their text AND the substituted values (pack params, and user --set/--input)
+    are trusted. Build/prepare steps come from the pack (author-controlled) and
+    this is a locally-run dev tool, so this is acceptable; do NOT feed untrusted
+    input here. Use list-form (argv, shell=False) when a value could be hostile."""
     Path(cwd).mkdir(parents=True, exist_ok=True)
     for cmd in cmds or []:
         if isinstance(cmd, list):
