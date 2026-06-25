@@ -306,6 +306,29 @@ def _readme_usage(scan: Dict[str, object], knowledge: Optional[Dict]) -> str:
     return "(no entrypoint detected)"
 
 
+def _looks_like_dependency(line: str) -> bool:
+    """Keep short, tool-name-like dependency entries; drop README prose that the
+    coarse scanner picked up (markdown headers, numbered/bulleted install steps,
+    sentences, URLs, shell exports). A real dependency is a short token or two,
+    not a sentence."""
+    s = str(line).strip()
+    if not s:
+        return False
+    if len(s) > 40 or len(s.split()) > 4:        # sentences / long prose
+        return False
+    if s[0] in "#=*->•":                           # markdown header / bullet
+        return False
+    if re.match(r"^[(\[]?\d+[.)\]]", s):           # "1.", "(2)", "[3]" numbering
+        return False
+    if "http://" in s or "https://" in s or "://" in s:
+        return False
+    if any(tok in s for tok in ("export ", "$", "[", "`", ":")):  # shell / paths / md
+        return False
+    if ".." in s or "/" in s:                       # command/path fragments (e.g. "cmake ..")
+        return False
+    return True
+
+
 def _readme_install(scan: Dict[str, object], knowledge: Optional[Dict]) -> List[str]:
     cmds: List[str] = []
     names = {str(b).split("/")[-1].lower() for b in scan.get("build_files", [])}
@@ -314,7 +337,11 @@ def _readme_install(scan: Dict[str, object], knowledge: Optional[Dict]) -> List[
     for t in scan.get("build_targets", []) or []:
         cmds.append(f'cd {t} && mkdir -p build && cd build && cmake .. && make')
     lines: List[str] = []
-    deps = scan.get("dependencies", []) or []
+    deps: List[str] = []
+    for d in scan.get("dependencies", []) or []:    # filter prose + dedupe, keep order
+        d = str(d).strip()
+        if _looks_like_dependency(d) and d not in deps:
+            deps.append(d)
     if deps:
         lines += ["Dependencies:", ""] + [f"- {d}" for d in deps[:20]] + [""]
     if cmds:

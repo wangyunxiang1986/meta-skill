@@ -37,6 +37,48 @@ class ReadmeStatusTest(unittest.TestCase):
         self.assertEqual(generate.readme_status(scan), "ok")
 
 
+class ReadmeInstallFilterTest(unittest.TestCase):
+    def test_prose_dependency_lines_are_filtered_out(self):
+        # scan["dependencies"] can pick up README prose (markdown headers, numbered
+        # install steps, sentences). The Installation section must keep short
+        # tool-name-ish deps and drop the prose. (Real CLVisc regression.)
+        scan = _scan(dependencies=[
+            "= CLVisc: a (3+1)D viscous hydrodynamic program parallelized on GPU =",
+            "1. Install OpenCL",
+            "(2) For Linux using Nvidia GPU, install CUDA -- Shipped with OpenCL.",
+            "`conda install -c conda-forge pyopencl`",
+            "export PATH=[gsl_path]/bin:$PATH",
+            "cmake",
+            "gsl",
+        ])
+        lines = generate._readme_install(scan, None)
+        text = "\n".join(lines)
+        # short tool names kept
+        self.assertIn("- cmake", text)
+        self.assertIn("- gsl", text)
+        # prose dropped
+        self.assertNotIn("CLVisc: a (3+1)D", text)
+        self.assertNotIn("1. Install OpenCL", text)
+        self.assertNotIn("For Linux using Nvidia GPU", text)
+        self.assertNotIn("export PATH", text)
+
+    def test_command_fragments_dropped_and_deduped(self):
+        # "cmake .." style build-command fragments (path-like, repeated) are noise.
+        scan = _scan(dependencies=["cmake ..", "cmake ..", "gsl", "gsl", "src/foo"])
+        lines = generate._readme_install(scan, None)
+        text = "\n".join(lines)
+        self.assertNotIn("cmake ..", text)        # path-like fragment dropped
+        self.assertNotIn("src/foo", text)         # path dropped
+        self.assertEqual(text.count("- gsl"), 1)  # deduped
+
+    def test_no_dependencies_block_when_all_prose(self):
+        scan = _scan(dependencies=["1. Install OpenCL", "2. Download Anaconda"],
+                     build_files=["Makefile"])
+        text = "\n".join(generate._readme_install(scan, None))
+        self.assertNotIn("Dependencies:", text)   # nothing real survived the filter
+        self.assertIn("make", text)               # build still shown
+
+
 class RenderReadmeTest(unittest.TestCase):
     def _pack(self):
         return {"name": "demo", "knowledge": {
