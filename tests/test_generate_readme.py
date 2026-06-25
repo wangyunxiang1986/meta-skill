@@ -1,7 +1,11 @@
 import pathlib
+import subprocess
+import sys
 import tempfile
 import unittest
 from engine import generate
+
+ENGINE_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 def _scan(**kw):
@@ -106,6 +110,52 @@ class GenerateWritesReadmeTest(unittest.TestCase):
             report = generate.generate(scan, None, out)
             self.assertFalse((out / "references" / "generated-README.md").exists())
             self.assertEqual(report["readme_status"], "ok")
+
+
+class IntoSourceCliTest(unittest.TestCase):
+    def _run(self, root, out, extra):
+        return subprocess.run(
+            [sys.executable, "-m", "engine.generate",
+             "--project-root", str(root), "--out-dir", str(out),
+             "--packs-dir", str(ENGINE_ROOT / "packs")] + extra,
+            cwd=str(ENGINE_ROOT), text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+    def test_into_source_writes_readme_when_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "proj"
+            root.mkdir()
+            (root / "cli.py").write_text("import sys\nx = sys.argv[1]\n", encoding="utf-8")
+            out = pathlib.Path(tmp) / "skill"
+            proc = self._run(root, out, ["--into-source"])
+            self.assertEqual(proc.returncode, 0, proc.stdout)
+            self.assertTrue((root / "README.md").exists())
+
+    def test_default_does_not_touch_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "proj"
+            root.mkdir()
+            (root / "cli.py").write_text("import sys\nx = sys.argv[1]\n", encoding="utf-8")
+            out = pathlib.Path(tmp) / "skill"
+            proc = self._run(root, out, [])           # no --into-source
+            self.assertEqual(proc.returncode, 0, proc.stdout)
+            self.assertFalse((root / "README.md").exists())
+            self.assertTrue((out / "references" / "generated-README.md").exists())
+
+    def test_into_source_never_overwrites_existing_readme(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "proj"
+            root.mkdir()
+            # stale README: documents 0 positionals, code needs 1 -> problematic.
+            # The command line must start with `python ...` so the scanner's README
+            # command parser picks it up (a `run: ...` prefix is not recognized).
+            (root / "cli.py").write_text("import sys\nx = sys.argv[1]\n", encoding="utf-8")
+            (root / "README.md").write_text("python cli.py\nMINE\n", encoding="utf-8")
+            out = pathlib.Path(tmp) / "skill"
+            proc = self._run(root, out, ["--into-source"])
+            self.assertEqual(proc.returncode, 0, proc.stdout)
+            self.assertIn("MINE", (root / "README.md").read_text(encoding="utf-8"))
+            self.assertTrue((root / "README.generated.md").exists())
 
 
 if __name__ == "__main__":

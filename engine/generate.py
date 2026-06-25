@@ -677,6 +677,10 @@ def main() -> int:
     ap.add_argument("--packs-dir", default=str(Path(__file__).resolve().parents[1] / "packs"))
     ap.add_argument("--force", action="store_true",
                     help="regenerate even if a usable skill already exists at --out-dir")
+    ap.add_argument("--into-source", action="store_true",
+                    help="also write the generated README into the source tree "
+                         "(README.md if missing; README.generated.md if the existing "
+                         "README is stale; never overwrites an existing README.md)")
     args = ap.parse_args()
     from engine import scan as scanmod
     from engine import pack_loader
@@ -689,6 +693,15 @@ def main() -> int:
         return 2
     pack = pack_loader.select_pack(Path(args.packs_dir), scan, root)
     report = compose(scan, pack, Path(args.out_dir), force=args.force)
+    if args.into_source:
+        status = readme_status(scan)
+        if status != "ok":
+            src_root = Path(scan.get("project_root") or args.project_root)
+            readme = src_root / "README.md"
+            target = readme if status == "missing" and not readme.exists() \
+                else src_root / "README.generated.md"
+            target.write_text(render_readme(scan, pack), encoding="utf-8")
+            report["readme_written_to"] = str(target)
     print(json.dumps(report, indent=2))
     return 0
 
