@@ -714,6 +714,13 @@ def compose(scan: Dict[str, object], pack: Optional[Dict], out_dir: Path,
     if not force and skill_exists(out_dir):
         return {"name": generated_skill_name(scan, pack), "out_dir": str(out_dir),
                 "skipped": True, "reason": "existing skill present"}
+    existing = scan.get("existing_skills") or []
+    if not force and existing:
+        # The code already ships hand-authored skill(s); defer to them rather
+        # than generate a competing, thinner one. --force overrides.
+        return {"name": generated_skill_name(scan, pack), "out_dir": str(out_dir),
+                "skipped": True, "reason": "code ships its own skill(s); prefer those (use --force to generate anyway)",
+                "existing_skills": existing}
     report = generate(scan, pack, out_dir)
     report["skipped"] = False
     return report

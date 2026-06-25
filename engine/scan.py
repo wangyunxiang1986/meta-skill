@@ -573,6 +573,58 @@ def _effective_root(root: Path, max_depth: int = 3) -> Path:
     return root
 
 
+_SKILL_JUNK_DIRS = {".git", "__pycache__", "node_modules", "__MACOSX",
+                    ".ipynb_checkpoints", ".mypy_cache", ".pytest_cache"}
+
+
+def _skill_meta(skill_md: Path):
+    """(name, description) from a SKILL.md YAML frontmatter; best-effort, falls
+    back to the parent directory name."""
+    name = skill_md.parent.name
+    desc = ""
+    try:
+        text = skill_md.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return name, desc
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        fm = text[3:end] if end != -1 else ""
+        for line in fm.splitlines():
+            if line.startswith("name:"):
+                name = line.split(":", 1)[1].strip() or name
+            elif line.startswith("description:"):
+                desc = line.split(":", 1)[1].strip().strip('"').strip("'")
+                if desc in (">", "|", ">-", "|-", ">+", "|+"):
+                    desc = ""        # YAML block scalar; body on following lines (best-effort: skip)
+    return name, desc
+
+
+def detect_existing_skills(root: Path) -> list:
+    """Hand-authored skills the code already ships (a SKILL.md living under a
+    skills-ish directory). The meta-skill defers to these instead of generating
+    a competing, thinner skill. Detection is by location -- some ancestor dir
+    name contains 'skill' -- which matches both the `.claude/skills/<name>/`
+    convention and project conventions like `LBTskills/<name>/`. Our own
+    generated skills (which carry references/project-profile.json) are excluded."""
+    root = Path(root)
+    out, seen = [], set()
+    for skill_md in root.rglob("SKILL.md"):
+        parts = skill_md.relative_to(root).parts
+        if any(p in _SKILL_JUNK_DIRS for p in parts):
+            continue
+        if not any("skill" in p.lower() for p in parts[:-1]):
+            continue                                  # not under a skills-ish dir
+        if (skill_md.parent / "references" / "project-profile.json").exists():
+            continue                                  # our own generated skill, not code-shipped
+        rel = "/".join(parts)
+        if rel in seen:
+            continue
+        seen.add(rel)
+        name, desc = _skill_meta(skill_md)
+        out.append({"name": name, "path": rel, "description": desc})
+    return sorted(out, key=lambda s: s["path"])
+
+
 def scan_project(root: Path) -> Dict[str, object]:
     root = _effective_root(Path(root).resolve())
     files = scan_files(root)
@@ -597,5 +649,6 @@ def scan_project(root: Path) -> Dict[str, object]:
         "dependencies": dependency_lines(readme_text),
         "readme_commands": readme_cmds,
         "primary_entry": primary_entrypoint(entries, readme_cmds),
+        "existing_skills": detect_existing_skills(root),
     })
     return scan
