@@ -515,6 +515,44 @@ def generated_skill_name(scan: Dict[str, object], pack: Optional[Dict]) -> str:
     return "-".join(parts)
 
 
+def _join_and(items: List[str]) -> str:
+    items = [i for i in items if i]
+    if len(items) <= 1:
+        return items[0] if items else ""
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return ", ".join(items[:-1]) + f", and {items[-1]}"
+
+
+def render_skill_description(scan: Dict[str, object], pack: Optional[Dict]) -> str:
+    """Trigger-facing one-line description for the generated skill. Generic:
+    code identity, verbs, and trigger phrases are filled from scan/pack at
+    generation time -- the engine names no model. Scoped to THIS checkout so it
+    does not over-trigger on other forks/contexts."""
+    knowledge = (pack or {}).get("knowledge") or {}
+    code_id = (pack or {}).get("name") or Path(scan.get("project_root", "project")).name or "project"
+    entry = (scan.get("primary_entry") or {}).get("path") if scan.get("primary_entry") else None
+    what = knowledge.get("description")
+    if not what:
+        what = f"The {code_id} code" + (f" (entry `{entry}`)" if entry else "")
+    what = str(what).strip().rstrip(".")
+    verbs = ["run it"]                                  # always: scan found an entry
+    if scan.get("parameters"):
+        verbs.append("edit its parameters")
+    if scan.get("output_files") or knowledge.get("observable_locator"):
+        verbs.append("analyze its outputs")
+    triggers: List[str] = []
+    for rule in knowledge.get("intent_rules") or []:    # user-phrasing only
+        for m in (rule.get("match") or []):
+            m = str(m).strip()
+            if m and m not in triggers:
+                triggers.append(m)
+    eg = f", e.g. {', '.join(triggers[:4])}" if triggers else ""
+    desc = (f"{what}. Use this skill to {_join_and(verbs)} for this scanned "
+            f"checkout of {code_id}{eg}.")
+    return " ".join(desc.split()).replace('"', "'")     # YAML single-line safe
+
+
 def render_skill_md(scan: Dict[str, object], pack: Optional[Dict]) -> str:
     name = generated_skill_name(scan, pack)
     pack_name = (pack or {}).get("name", "generic")
@@ -534,7 +572,7 @@ def render_skill_md(scan: Dict[str, object], pack: Optional[Dict]) -> str:
         run_line += " This generic skill has no runnable pack profile yet."
     return (
         f"---\nname: {name}\n"
-        f"description: \"Version-specific skill for this scanned checkout.\"\n---\n\n"
+        f"description: \"{render_skill_description(scan, pack)}\"\n---\n\n"
         f"# {name}\n\n"
         f"## What This Program Does\n\n"
         f"This skill was generated from one scanned checkout using the `{pack_name}` knowledge "
