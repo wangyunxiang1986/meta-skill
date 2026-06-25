@@ -28,10 +28,9 @@ class TriggerDescriptionTest(unittest.TestCase):
         d = generate.render_skill_description(scan, pack)
         self.assertIn("DemoCode: a toy transport model", d)
         self.assertIn("for this scanned checkout of demo", d)   # preposition present (grammar)
-        self.assertIn("run it", d)
-        self.assertIn("edit its parameters", d)
-        self.assertIn("analyze its outputs", d)
-        self.assertIn("scan coupling", d)               # human-phrasing trigger
+        # _join_and grammar (Oxford comma + "and") and the e.g. clause are pinned:
+        self.assertIn("run it, edit its parameters, and analyze its outputs", d)
+        self.assertIn(", e.g. scan coupling", d)        # human-phrasing trigger, with clause prefix
 
     def test_no_pack_noun_phrase_and_scan_verbs(self):
         scan = _scan(project_root="/tmp/FooSolver",
@@ -48,10 +47,18 @@ class TriggerDescriptionTest(unittest.TestCase):
 
     def test_yaml_single_line_safe(self):
         scan = _scan(parameters=[{"name": "a"}])
-        pack = _pack(description='He said "hi"\nand more.')
+        pack = _pack(description='He said "hi"\nand a path C:\\x\\')
         d = generate.render_skill_description(scan, pack)
         self.assertNotIn('"', d)                          # double quotes neutralized
         self.assertNotIn("\n", d)                         # single line
+        self.assertNotIn("\\", d)                         # backslash neutralized (no escape introducer)
+
+    def test_two_verb_join(self):
+        # exercises _join_and's 2-item branch (run it + edit its parameters, no outputs)
+        scan = _scan(parameters=[{"name": "a"}], output_files=[])
+        d = generate.render_skill_description(scan, _pack(description="X."))
+        self.assertIn("run it and edit its parameters", d)
+        self.assertNotIn("analyze its outputs", d)
 
     def test_wired_into_skill_md(self):
         scan = _scan(parameters=[{"name": "a"}])

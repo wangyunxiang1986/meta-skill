@@ -550,7 +550,10 @@ def render_skill_description(scan: Dict[str, object], pack: Optional[Dict]) -> s
     eg = f", e.g. {', '.join(triggers[:4])}" if triggers else ""
     desc = (f"{what}. Use this skill to {_join_and(verbs)} for this scanned "
             f"checkout of {code_id}{eg}.")
-    return " ".join(desc.split()).replace('"', "'")     # YAML single-line safe
+    # YAML single-line safe: collapse whitespace (no newline), and neutralize
+    # backslash (escape introducer) + double quote so the value is always valid
+    # inside  description: "..."
+    return " ".join(desc.split()).replace("\\", "/").replace('"', "'")
 
 
 def render_evals(scan: Dict[str, object], pack: Optional[Dict]) -> Dict[str, object]:
