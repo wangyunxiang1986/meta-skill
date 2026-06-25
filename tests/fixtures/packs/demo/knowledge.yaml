@@ -1,0 +1,12 @@
+param_meaning:
+  alpha: "a demo knob"
+output_meaning:
+  "result.dat": "demo result"
+observable_locator:
+  y: { file: "result.dat", column: 1 }
+intent_rules: []
+run_profiles:
+  minimal:
+    command_template: "python run.py {config}"
+    tier1_output: result.dat
+    tier2_observable: y

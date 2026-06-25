@@ -1,0 +1,4 @@
+interface:
+  display_name: "project-explorer-and-skill-creator"
+  short_description: "Explore a scientific code package and create + validate a version-specific skill"
+  default_prompt: "帮我探索这个程序包并创建一个可用技能"

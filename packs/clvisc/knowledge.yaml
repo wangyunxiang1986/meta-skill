@@ -1,0 +1,90 @@
+param_meaning:
+  SQRTS: "质心系每核子对碰撞能量 (GeV)"
+  ETAOS_YMIN: "剪切粘滞系数 eta/s 的最小值"
+  ETAOS_XMIN: "eta/s(T) 取最小值处的温度"
+  TFRZ: "冻结温度 (GeV)"
+  Edmax: "最中心碰撞的最大能量密度"
+  NX: "x 方向网格数"
+  NY: "y 方向网格数"
+  NZ: "etas(时空快度) 方向网格数"
+  initial_type: "初态类型 (glauber/mcglauber/trento/ampt/handcrafted)"
+  cent: "中心度区间, 如 0_5"
+  eos_type: "状态方程类型 (hotqcd2014/lattice_pce165/...)"
+  run_evolution: "是否运行流体演化"
+  run_cooperfrye: "是否做 Cooper-Frye 粒子化"
+  run_afterbuner: "是否运行强子输运 afterburner"
+  sample_type: "粒子化方式 (mc/mcgpu/smooth)"
+  nsample: "Cooper-Frye 过采样数"
+  reso_decay: "是否做共振态衰变"
+
+output_meaning:
+  "hydro.info": "运行配置快照"
+  "hypersf.dat": "冻结超曲面元"
+  "sf_txyz.dat": "冻结面元的时空坐标"
+  "pimnsf.dat": "冻结面上剪切应力张量 pi^{mu nu}"
+  "qbmusf.dat": "冻结面上重子扩散流"
+  "bulkprsf.dat": "冻结面上体黏滞压"
+  "sf_nbmutp.dat": "冻结面净重子/化学势/温度"
+  "bulkinfo.h5": "HDF5 体演化与平均观测量"
+  "ev.dat": "演化末态网格"
+  "history.dat": "EdMax 等随 tau 的历史"
+  "dNdEta_mc_*.dat": "蒙特卡洛采样赝快度分布"
+  "dNdY_mc_*.dat": "蒙特卡洛采样快度分布"
+  "dN_over_2pid*ptdpt_mc_*.dat": "蒙特卡洛采样 pT 谱"
+  "vn_mc_*.dat": "蒙特卡洛采样各阶流 vn(pT)"
+
+observable_locator:
+  dNchdeta: { file: "dNdEta_mc_charged.dat" }
+  v2:       { file: "vn_mc_charged.dat", column: 2 }
+
+intent_rules:
+  - match: ["扫粘滞", "改 eta/s 看椭圆流", "scan eta/s"]
+    plan: { scan_param: ETAOS_YMIN, fixed: [SQRTS, cent], extract: v2 }
+  - match: ["扫能量", "scan energy", "2.76 到 5.02"]
+    plan: { scan_param: SQRTS, values: [2760, 5020] }
+
+run_profiles:
+  minimal:
+    # 命令不写死:引擎从"扫描到的主入口 + 反推的 argv 名"自动生成。
+    # 这里只给"语义槽 -> 参数名模式"(版本无关)与其余位置参数默认值。
+    driver:
+      arg_map:
+        config: ["fconfig", "config", "info"]
+        cent: ["cent"]
+        gpu: ["gpu"]
+      # Per-name defaults only (dev_stable's start/end event ids). No catch-all:
+      # any positional the pack can't name (e.g. a public fork's collision system)
+      # is emitted as a <placeholder> for the user to fill, not silently guessed.
+      arg_defaults: { start_id: "0", end_id: "1" }
+    base_config: "pyvisc/hydro.info"
+    work_subdir: "pyvisc"
+    config_edits:
+      initial_type: trento
+      run_cooperfrye: "yes"     # 需到 T2(dNch/deta 需粒子化);跑不动则优雅停在 T1
+      run_afterbuner: "no"
+      sample_type: mc
+      reso_decay: "True"
+    output_key: fPathOut
+    tier1_output: hypersf.dat
+    tier2_observable: dNchdeta
+    needs: [opencl, "build:3rdparty/trento_with_participant_plane"]
+
+param_constraints:
+  eos_type:
+    choices: [hotqcd2014, lattice_pce165, neosB, neosBQS, ideal]
+    note: "状态方程类型"
+  initial_type:
+    choices: [glauber, mcglauber, trento, ampt, handcrafted]
+  sample_type:
+    choices: [mc, mcgpu, smooth]
+  nsample:
+    range: [1, 2000]
+    note: "Cooper-Frye 过采样数"
+
+demos:
+  - title: "most-central spectra"
+    intent: "0-5% 最中心碰撞, 出 dNch/deta + pT 谱"
+    args: {cent: "0_5", gpu: "0"}
+  - title: "mid-peripheral elliptic flow"
+    intent: "20-30% 半边缘, 看椭圆流 v2"
+    args: {cent: "20_30", gpu: "0"}

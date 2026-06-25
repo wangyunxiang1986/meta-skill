@@ -1,0 +1,6 @@
+name: clvisc
+match:
+  any_of:
+    - file_exists: pyvisc/config.py
+    - file_exists: pyvisc/CLVisc.py
+    - file_exists: pyvisc/ebe_trento.py

@@ -1,0 +1,5 @@
+name: CHANGE_ME
+match:
+  any_of:
+    - file_exists: path/to/marker
+    - readme_contains: ProjectName

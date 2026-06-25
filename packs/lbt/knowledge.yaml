@@ -1,0 +1,140 @@
+param_meaning:
+  LBTswitch: "是否打开 LBT 输运 (1 才做介质传播; 0 近似自由流)"
+  Kradiation: "介质诱导辐射开关 (打开增加辐射能损与 high-pT 压低; 需确认 radiation table 已读入)"
+  Kprimary: "是否只保留 primary 传播 (打开会削弱/关闭 recoil/medium response)"
+  Kfishbone: "只让主树 parton 传播但不与介质相互作用 (仅 debug)"
+  tauswitch: "使用 tau-eta 坐标 (1 时 dt 解释为 dtau, 须与 hydro 坐标一致)"
+  switchCoLBT_Hydro: "CoLBT-Hydro 耦合源项模式 (普通 LBT run 不应打开)"
+  Ecut: "局域静止系能量 cut (更高时低能 parton 更早停止或进入源项)"
+  switchtwcoll: "recoil/negative 是否继续后续碰撞 (打开让 medium response 继续演化)"
+  Kqhat0: "Debye 屏蔽质量 / qhat 设置 (影响散射核, 版本依赖强)"
+  alphas: "强耦合常数 (增大增强散射率与能损; 改它即新物理点)"
+  ncall: "每个 job 的事件数因子 (影响事件数与分析归一化)"
+  nprint: "打印频率 (影响日志大小)"
+  NUM1: "随机数/内部控制参数 (依版本解释)"
+  time0: "LBT 演化起始时间 (应与 parton formation / 流体起始时间兼容)"
+  timend: "演化终止时间 (太短截断能损)"
+  dt: "LBT 时间步长 (tauswitch=1 时为 dtau)"
+  switchsingle: "单 parton 测试 (1 时用 ener/mass/Kjet/... 单 parton 设置)"
+  NRcut: "辐射采样截断控制 (太小可能截断辐射采样)"
+  NScut: "散射采样截断控制 (太小可能截断散射采样)"
+  switchphasecut: "是否启用相空间 cut (改变散射/辐射允许区域)"
+  switchmedium: "1=静态均匀介质 (debug), 0=外部 hydro 背景 (真实 AA)"
+  temp0medium: "静态介质温度 (仅 switchmedium=1 生效)"
+  tau0: "tau 坐标起点 (仅 tauswitch=1)"
+  tauend: "tau 坐标终点 (仅 tauswitch=1)"
+  dtau: "tau 坐标步长 (仅 tauswitch=1)"
+  tauhydro0: "流体起始时间 (须与流体 profile 起始 tau 对齐)"
+  nxhydro: "流体 x 方向格点数 (须与 bulk3d.dat 一致)"
+  nyhydro: "流体 y 方向格点数 (须与 bulk3d.dat 一致)"
+  netahydro: "流体 eta 方向格点数 (须与 bulk3d.dat 一致)"
+  dtauhydro: "流体时间步长 (须与 bulk3d.dat / tau.dat 网格一致)"
+
+# Pack-supplied parameter rows: the structural scanner cannot read LBTinput.txt
+# (a custom 'name\nvalue' format), so the pack provides them directly. Meaning is
+# reused from param_meaning; choices/range from param_constraints. Defaults are the
+# real values in the shipped LBTinput.txt. source = where the agent derived them.
+pack_parameters:
+  - { name: LBTswitch, default: "1", source: "LBTinput.txt" }
+  - { name: Kradiation, default: "1", source: "LBTinput.txt" }
+  - { name: Kprimary, default: "0", source: "LBTinput.txt" }
+  - { name: Kfishbone, default: "0", source: "LBTinput.txt" }
+  - { name: tauswitch, default: "0", source: "LBTinput.txt" }
+  - { name: switchCoLBT_Hydro, default: "0", source: "LBTinput.txt" }
+  - { name: Ecut, default: "2.0", source: "LBTinput.txt" }
+  - { name: switchtwcoll, default: "1", source: "LBTinput.txt" }
+  - { name: Kqhat0, default: "2", source: "LBTinput.txt" }
+  - { name: alphas, default: "0.27", source: "LBTinput.txt" }
+  - { name: ncall, default: "4", source: "LBTinput.txt" }
+  - { name: nprint, default: "10", source: "LBTinput.txt" }
+  - { name: NUM1, default: "-33", source: "LBTinput.txt" }
+  - { name: time0, default: "0.6", source: "LBTinput.txt" }
+  - { name: timend, default: "20.0", source: "LBTinput.txt" }
+  - { name: dt, default: "0.4", source: "LBTinput.txt" }
+  - { name: switchsingle, default: "0", source: "LBTinput.txt" }
+  - { name: NRcut, default: "10000", source: "LBTinput.txt" }
+  - { name: NScut, default: "10000", source: "LBTinput.txt" }
+  - { name: switchphasecut, default: "0", source: "LBTinput.txt" }
+  - { name: switchmedium, default: "0", source: "LBTinput.txt" }
+  - { name: temp0medium, default: "0.3", source: "LBTinput.txt" }
+  - { name: tauhydro0, default: "0.6", source: "LBTinput.txt" }
+  - { name: nxhydro, default: "73", source: "LBTinput.txt" }
+  - { name: nyhydro, default: "73", source: "LBTinput.txt" }
+  - { name: netahydro, default: "33", source: "LBTinput.txt" }
+  - { name: dtauhydro, default: "0.4", source: "LBTinput.txt" }
+
+# Pack-supplied outputs: scanner detects none for this C++ code, so declare them here.
+pack_outputs:
+  - { file: "positive.dat", source: "main.cpp" }
+  - { file: "negative.dat", source: "main.cpp" }
+  - { file: "output_validation.json", source: "LBTmodel validate" }
+  - { file: "hadrons_*.dat", source: "ColorlessHadronization" }
+  - { file: "charged_hadron_spectrum_3d.npz", source: "downstream analysis" }
+
+output_meaning:
+  "positive.dat": "LBT 输运正贡献终态 parton (列: id px py pz E x y z t CAT, 事件分隔 '# id count')"
+  "negative.dat": "recoil/hole 负贡献 parton (列: id px py pz E x y z t, 已带负号), 与 positive 配对做负贡献扣除"
+  "output_validation.json": "输出结构/数值校验 (列数/事件配对/NaN)"
+  "data_catalog.md": "逐输出语义说明书 (由 LBT-data-catalog 生成)"
+  "hadrons_*.dat": "ColorlessHadronization 强子化输出 (positive - negative 后的 hadron)"
+  "charged_hadron_spectrum_3d.npz": "最终带电强子三维谱 dN/(pT dpT deta dphi)"
+
+observable_locator:
+  dNdpT_parton: { file: "positive.dat" }
+
+intent_rules:
+  - match: ["扫耦合", "scan alphas", "改 alphas 看能损"]
+    plan: { scan_param: alphas, extract: dNdpT_parton }
+  - match: ["关辐射", "turn off radiation", "Kradiation"]
+    plan: { set_param: Kradiation, extract: dNdpT_parton }
+
+run_profiles:
+  minimal:
+    # 命令不写死: 引擎从扫描到的主入口 (main.cpp -> 编译可执行 lbt) + argv 推导。
+    # LBT 主程序只有一个位置参数 jobid (main.cpp: atoi(argv[1]))。
+    driver:
+      arg_map:
+        config: ["LBTinput", "input"]
+      # Only run-knob defaults here; the COMMAND is derived by the engine from
+      # main.cpp (argv[1]=jobid) + Makefile (EXE=lbt) -> `./lbt {jobid}`.
+      arg_defaults: { jobid: "0" }
+    run_in: work            # run in an isolated work dir (non-destructive to source)
+    # build: copy sources to a scratch build dir and compile there (don't touch source)
+    build:
+      - "mkdir -p {work}/build"
+      - "cp {root}/*.cpp {root}/*.h {root}/Makefile {work}/build/"
+      - "make -C {work}/build"
+    # external-input roots the user must declare (data location is never in source):
+    #   rate_path   -> ratedata, dNg_over_dt_q.dat, dNg_over_dt_g.dat
+    #   bulk3D_path -> geometry.dat, tau.dat, bulk3d.dat
+    #   parton_path -> tot.dat, hydro_<jobid%N>/{cs,pp,hardest}.dat
+    inputs:
+      rate_path: null
+      bulk3D_path: null
+      parton_path: null
+    # prepare: stage the binary + build LBTinput_<jobid>.txt (LBT reads the jobid-
+    # suffixed file; the three input paths are appended in its label/value format).
+    prepare:
+      - "cp {work}/build/lbt ."
+      - "python3 -c \"open('LBTinput_{jobid}.txt','w').write(open('{root}/LBTinput.txt').read().rstrip()+chr(10)+'{rate_path}'+chr(10)+'bulk3D_path'+chr(10)+'{bulk3D_path}'+chr(10)+'parton_path'+chr(10)+'{parton_path}'+chr(10))\""
+    tier1_output: positive.dat
+    tier2_observable: dNdpT_parton
+    needs: []
+
+param_constraints:
+  LBTswitch: { choices: [0, 1], note: "LBT 输运总开关" }
+  Kradiation: { choices: [0, 1], note: "介质诱导辐射" }
+  Kprimary: { choices: [0, 1] }
+  tauswitch: { choices: [0, 1], note: "t-z 还是 tau-eta 坐标" }
+  switchsingle: { choices: [0, 1], note: "单 parton 测试模式" }
+  switchmedium: { choices: [0, 1], note: "静态介质 vs 外部 hydro" }
+  alphas: { range: [0.1, 0.5], note: "强耦合常数" }
+  ncall: { range: [1, 10000], note: "每 job 事件数因子" }
+
+demos:
+  - title: "default AA transport (small test)"
+    intent: "用现有 hydro/shower 输入跑一次最小 LBT 输运, 出 positive.dat"
+    args: {jobid: "0"}
+  - title: "coupling scan point"
+    intent: "改 alphas 看 parton 能损 (新物理点, 需记录)"
+    args: {jobid: "0"}

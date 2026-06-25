@@ -1,0 +1,21 @@
+param_meaning: {}
+output_meaning: {}
+observable_locator: {}
+intent_rules: []
+run_profiles:
+  minimal:
+    # Command is NOT hardcoded: the engine builds it from the scan-detected primary
+    # entry. Only declare semantic-slot -> arg-name patterns + defaults here.
+    driver:
+      arg_map:
+        config: ["config", "info"]
+        cent: ["cent"]
+        gpu: ["gpu"]
+      arg_defaults: { default: "0" }
+    base_config: "path/to/config"
+    work_subdir: "."
+    config_edits: {}
+    output_key: OUTPUT_DIR_KEY
+    tier1_output: SOME_OUTPUT_FILE
+    tier2_observable: SOME_OBSERVABLE
+    needs: []

@@ -1,0 +1,7 @@
+name: lbt
+match:
+  any_of:
+    - file_exists: LBT.cpp
+    - file_exists: LBT.h
+    - file_exists: LBTinput.txt
+    - readme_contains: Linear Boltzmann Transport

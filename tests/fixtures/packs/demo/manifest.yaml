@@ -1,0 +1,5 @@
+name: demo
+match:
+  any_of:
+    - file_exists: marker.txt
+    - readme_contains: DemoPkg
