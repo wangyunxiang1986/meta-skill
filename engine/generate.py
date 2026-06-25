@@ -553,6 +553,40 @@ def render_skill_description(scan: Dict[str, object], pack: Optional[Dict]) -> s
     return " ".join(desc.split()).replace('"', "'")     # YAML single-line safe
 
 
+def render_evals(scan: Dict[str, object], pack: Optional[Dict]) -> Dict[str, object]:
+    """Starter eval prompts for skill-creator (prompts only; skill-creator adds
+    assertions). Generic: derived from pack demos / intent_rules, else one
+    generic prompt. The engine names no model."""
+    knowledge = (pack or {}).get("knowledge") or {}
+    evals: List[Dict] = []
+    for demo in (knowledge.get("demos") or [])[:3]:
+        intent = str(demo.get("intent") or demo.get("title") or "").strip()
+        if not intent:
+            continue
+        prompt = f"Using this skill, {intent}."
+        args = demo.get("args") or {}
+        if args:
+            prompt += " Suggested settings: " + ", ".join(f"{k}={v}" for k, v in args.items()) + "."
+        evals.append({"id": len(evals) + 1, "prompt": prompt,
+                      "expected_output": intent, "files": []})
+    if not evals:
+        for rule in (knowledge.get("intent_rules") or [])[:3]:
+            matches = rule.get("match") or []
+            if not matches:
+                continue
+            intent = str(matches[0]).strip()
+            evals.append({"id": len(evals) + 1,
+                          "prompt": f"Using this skill, {intent}.",
+                          "expected_output": f"a correct result for: {intent}",
+                          "files": []})
+    if not evals:
+        evals.append({"id": 1,
+                      "prompt": "Run this code's documented minimal example and report its primary output.",
+                      "expected_output": "the minimal run completes and the primary output is produced",
+                      "files": []})
+    return {"skill_name": generated_skill_name(scan, pack), "evals": evals}
+
+
 def render_skill_md(scan: Dict[str, object], pack: Optional[Dict]) -> str:
     name = generated_skill_name(scan, pack)
     pack_name = (pack or {}).get("name", "generic")
@@ -601,7 +635,8 @@ def render_skill_md(scan: Dict[str, object], pack: Optional[Dict]) -> str:
         f"- `references/demos.md`\n"
         f"- `references/verified-runs.md`\n"
         f"- `references/blocked-runs.md`\n"
-        f"- `references/model-gaps.md`\n\n"
+        f"- `references/model-gaps.md`\n"
+        f"- `evals/evals.json` (starter eval tasks for skill-creator)\n\n"
         f"## Scripts\n\n"
         f"- `scripts/config.py`: validate parameter choices, ranges, and exclusions.\n"
         f"{run_line}\n"
@@ -617,7 +652,12 @@ def render_skill_md(scan: Dict[str, object], pack: Optional[Dict]) -> str:
         f"## If Blocked\n\n"
         f"Do not report a deeper tier as successful. Record the blocker, inspect "
         f"`references/model-gaps.md`, update the generated scripts or source knowledge pack, "
-        f"then re-run validation.\n"
+        f"then re-run validation.\n\n"
+        f"## Evaluating & Improving This Skill\n\n"
+        f"This skill was auto-generated. To measure whether it actually helps an agent "
+        f"on real tasks -- and to improve it -- run the `skill-creator` skill on this "
+        f"directory. Starter test tasks are in `evals/evals.json`; skill-creator runs "
+        f"them with and without this skill, grades the results, and iterates.\n"
         f"{intent}"
     )
 
@@ -643,6 +683,7 @@ _GENERATED_FILES = [
     "references/verified-runs.md",
     "references/blocked-runs.md",
     "references/generated-README.md",
+    "evals/evals.json",
     "scripts/verify_environment.py",
     "scripts/analyze_outputs.py",
     "scripts/config.py",
@@ -694,6 +735,7 @@ def generate(scan: Dict[str, object], pack: Optional[Dict], out_dir: Path) -> Di
     status = readme_status(scan)
     if status != "ok":
         write_file(out_dir / "references/generated-README.md", render_readme(scan, pack))
+    write_file(out_dir / "evals/evals.json", json.dumps(render_evals(scan, pack), indent=2))
     write_file(out_dir / "references/project-profile.json",
                json.dumps(redact_scan_paths(scan, project_root), indent=2))
     from engine import understanding as _understanding

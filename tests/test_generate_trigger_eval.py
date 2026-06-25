@@ -61,5 +61,53 @@ class TriggerDescriptionTest(unittest.TestCase):
         self.assertNotIn("Version-specific skill for this scanned checkout", md)
 
 
+class EvalSeedTest(unittest.TestCase):
+    def test_from_demos(self):
+        pack = _pack(demos=[
+            {"title": "t1", "intent": "run the minimal case", "args": {"cent": "0_5"}},
+            {"title": "t2", "intent": "scan the coupling"},
+        ])
+        out = generate.render_evals(_scan(), pack)
+        self.assertEqual(out["skill_name"], generate.generated_skill_name(_scan(), pack))
+        self.assertEqual(len(out["evals"]), 2)
+        e0 = out["evals"][0]
+        self.assertIn("run the minimal case", e0["prompt"])
+        self.assertIn("cent=0_5", e0["prompt"])           # args surfaced
+        self.assertEqual(e0["files"], [])
+        self.assertTrue(e0["expected_output"])
+
+    def test_from_intent_rules_when_no_demos(self):
+        pack = _pack(intent_rules=[{"match": ["scan coupling"]}])
+        out = generate.render_evals(_scan(), pack)
+        self.assertEqual(len(out["evals"]), 1)
+        self.assertIn("scan coupling", out["evals"][0]["prompt"])
+
+    def test_generic_when_no_pack(self):
+        out = generate.render_evals(_scan(), None)
+        self.assertEqual(len(out["evals"]), 1)
+        self.assertIn("minimal example", out["evals"][0]["prompt"])
+
+    def test_generate_writes_evals_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "src"
+            root.mkdir()
+            out = pathlib.Path(tmp) / "skill"
+            generate.generate(_scan(project_root=str(root)), None, out)
+            ev = out / "evals" / "evals.json"
+            self.assertTrue(ev.exists())
+            data = json.loads(ev.read_text(encoding="utf-8"))
+            self.assertIn("skill_name", data)
+            self.assertTrue(data["evals"])
+
+    def test_skill_md_points_to_skill_creator(self):
+        md = generate.render_skill_md(_scan(), None)
+        self.assertIn("Evaluating & Improving", md)
+        self.assertIn("skill-creator", md)
+        self.assertIn("evals/evals.json", md)
+
+    def test_evals_in_generated_files(self):
+        self.assertIn("evals/evals.json", generate._GENERATED_FILES)
+
+
 if __name__ == "__main__":
     unittest.main()
