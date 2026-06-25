@@ -281,6 +281,17 @@ def readme_arg_mismatch(scan: Dict[str, object]) -> Optional[Dict[str, int]]:
     return None
 
 
+def readme_status(scan: Dict[str, object]) -> str:
+    """missing (no README) / problematic (README present but a problem signal
+    fires) / ok. Initial problem signal: a stale documented run command
+    (readme_arg_mismatch). Add more signals here later."""
+    if not scan.get("readme_path"):
+        return "missing"
+    if readme_arg_mismatch(scan) is not None:
+        return "problematic"
+    return "ok"
+
+
 def render_run_modes(scan: Dict[str, object], knowledge: Optional[Dict],
                      project_root: Optional[str] = None) -> str:
     lines = ["# Run Modes", ""]
