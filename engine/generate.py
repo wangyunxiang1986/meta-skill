@@ -553,6 +553,7 @@ _GENERATED_FILES = [
     "references/project-understanding.md",
     "references/verified-runs.md",
     "references/blocked-runs.md",
+    "references/generated-README.md",
     "scripts/verify_environment.py",
     "scripts/analyze_outputs.py",
     "scripts/config.py",
@@ -601,6 +602,9 @@ def generate(scan: Dict[str, object], pack: Optional[Dict], out_dir: Path) -> Di
     write_file(out_dir / "references/model-gaps.md", render_model_gaps(scan, pack))
     write_file(out_dir / "references/verified-runs.md", "# Verified Runs\n\n")
     write_file(out_dir / "references/blocked-runs.md", "# Blocked Runs\n\n")
+    status = readme_status(scan)
+    if status != "ok":
+        write_file(out_dir / "references/generated-README.md", render_readme(scan, pack))
     write_file(out_dir / "references/project-profile.json",
                json.dumps(redact_scan_paths(scan, project_root), indent=2))
     from engine import understanding as _understanding
@@ -637,7 +641,8 @@ def generate(scan: Dict[str, object], pack: Optional[Dict], out_dir: Path) -> Di
         launcher = TEMPLATES / "run_launcher.py"
         if launcher.exists():
             shutil.copy(launcher, out_dir / "scripts" / "run_launcher.py")
-    return {"name": generated_skill_name(scan, pack), "out_dir": str(out_dir)}
+    return {"name": generated_skill_name(scan, pack), "out_dir": str(out_dir),
+            "readme_status": status}
 
 
 def skill_exists(out_dir: Path) -> bool:

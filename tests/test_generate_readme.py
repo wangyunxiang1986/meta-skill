@@ -1,3 +1,5 @@
+import pathlib
+import tempfile
 import unittest
 from engine import generate
 
@@ -71,6 +73,39 @@ class RenderReadmeTest(unittest.TestCase):
                                     "argv_required": 1})
         md = generate.render_readme(scan, None)
         self.assertNotIn("Notes on the existing README", md)
+
+
+class GenerateWritesReadmeTest(unittest.TestCase):
+    def _scan_missing(self, root):
+        return {"readme_path": None, "primary_entry":
+                {"path": "main.cpp", "argv_names": ["jobid"], "argv_required": 1,
+                 "run_prefix": ["./demo"]},
+                "readme_commands": [], "parameters": [], "output_files": [],
+                "entrypoints": [], "build_targets": [], "build_files": ["Makefile"],
+                "dependencies": [], "git": {}, "directories": [], "file_counts": {},
+                "project_root": str(root)}
+
+    def test_generate_writes_readme_when_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "Demo"
+            root.mkdir()
+            out = pathlib.Path(tmp) / "skill"
+            report = generate.generate(self._scan_missing(root), None, out)
+            readme = out / "references" / "generated-README.md"
+            self.assertTrue(readme.exists())
+            self.assertIn("## Usage", readme.read_text(encoding="utf-8"))
+            self.assertEqual(report["readme_status"], "missing")
+
+    def test_generate_skips_readme_when_ok(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "Demo"
+            root.mkdir()
+            scan = self._scan_missing(root)
+            scan["readme_path"] = "README.md"        # present + consistent -> ok
+            out = pathlib.Path(tmp) / "skill"
+            report = generate.generate(scan, None, out)
+            self.assertFalse((out / "references" / "generated-README.md").exists())
+            self.assertEqual(report["readme_status"], "ok")
 
 
 if __name__ == "__main__":
