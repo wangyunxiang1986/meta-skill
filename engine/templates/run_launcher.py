@@ -332,6 +332,8 @@ def main():
     # declared inputs. The run COMMAND is still pack/engine-derived; this only
     # fills declared slots. Input LOCATIONS come from the user/pack, never source.
     inputs = _resolve_inputs(profile.get("inputs"), args.input)
+    inputs = {k: (v.replace("<PROJECT_ROOT>", str(root)) if isinstance(v, str) else v)
+              for k, v in inputs.items()}
     ctx = {"root": str(root), "work": str(work), "config": str(edited_cfg or ""),
            "cent": args.cent, "gpu": args.gpu}
     ctx.update({k: str(v) for k, v in (profile.get("params") or {}).items()})

@@ -1,0 +1,53 @@
+# URQMD hadronic afterburner (Duke/JETSCAPE-style osc2u+urqmd wrapper).
+# The bash `afterburner` entry is engine-derived (shell detector); this pack
+# only supplies meaning, run-knobs, and the bundled sample input.
+
+param_meaning:
+  input_file: "OSCAR1997A particle input (upstream Cooper-Frye sampler output)"
+  output_file: "Final state particle list (custom format: ID charge mass pT phi eta)"
+  tim: "Evolution time range; run to very late to output only final state (tim <t_end> <t_out>)"
+  cto: "Read OSCAR initial state from ftn10 (cto 40 2)"
+  f13_f20: "Suppress f13/f14/f15/f16/f18/f19/f20 output channels, keep only f30"
+
+# scanner detects 0 params for Fortran+conf; inject the real knobs here.
+pack_parameters:
+  - { name: input_file, default: "(OSCAR1997A list)", source: "afterburner $1" }
+  - { name: output_file, default: "(final particle list)", source: "afterburner $2" }
+  - { name: tim, default: "8000 8000", source: "urqmd.conf" }
+  - { name: cto, default: "40 2", source: "urqmd.conf" }
+  - { name: f13_f20, default: "suppressed", source: "urqmd.conf" }
+
+pack_outputs:
+  - { file: "particles_out.dat", source: "urqmd (ftn30)" }
+  - { file: "urqmd_input.dat", source: "osc2u" }
+  - { file: "tables.dat", source: "(collision tables, repo)" }
+
+output_meaning:
+  "particles_out.dat": "Final state hadron list (per-event '# event n particles m' header + 'ID charge mass pT phi eta' lines)"
+  "urqmd_input.dat": "Intermediate file: osc2u converts OSCAR to UrQMD input format"
+  "tables.dat": "UrQMD collision cross-section tables (shipped in repo)"
+
+observable_locator:
+  dNchdeta: { file: "particles_out.dat" }
+  v2: { file: "particles_out.dat" }
+
+run_profiles:
+  minimal:
+    # command NOT hardcoded: engine derives `./afterburner <in> <out>` from the
+    # scanned shell entry; this pack only fills the two positionals + run knobs.
+    driver:
+      arg_map: {}
+      arg_defaults:
+        inputfile: "{oscar_file}"
+        outputfile: "particles_out.dat"
+    inputs:
+      oscar_file: "<PROJECT_ROOT>/data3/oscar.dat"   # bundled sample; --input overrides
+    run_in: work
+    build:
+      - "cmake -S {root} -B {work}/build"
+      - "cmake --build {work}/build"
+    prepare:
+      - "cp {work}/build/osc2u/osc2u {work}/build/urqmd/urqmd {root}/afterburner {root}/tables.dat ."
+    tier1_output: particles_out.dat
+    tier2_observable: dNchdeta
+    needs: []

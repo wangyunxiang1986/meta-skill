@@ -138,5 +138,30 @@ class ArgvRequiredTest(unittest.TestCase):
         self.assertEqual(sig["argv_required"], 5)
 
 
+class ShellEntryTest(unittest.TestCase):
+    def test_detect_shell_entry_names_and_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "afterburner").write_text(
+                "#!/bin/bash\ninputfile=$1\noutputfile=$2\n./osc2u < $inputfile\n",
+                encoding="utf-8")
+            entries = scan.detect_shell_entrypoints(root)
+            self.assertEqual(len(entries), 1)
+            e = entries[0]
+            self.assertEqual(e["lang"], "shell")
+            self.assertEqual(e["argv_names"], ["inputfile", "outputfile"])
+            self.assertEqual(e["argv_required"], 2)
+            self.assertEqual(e["run_prefix"], ["./afterburner"])
+
+    def test_scan_project_falls_back_to_shell(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "model.f").write_text("      program x\n      end\n", encoding="utf-8")
+            (root / "run.sh").write_text("#!/bin/bash\nin=$1\nout=$2\n", encoding="utf-8")
+            sc = scan.scan_project(root)
+            self.assertEqual((sc.get("primary_entry") or {}).get("path"), "run.sh")
+            self.assertEqual(sc["primary_entry"]["argv_names"], ["in", "out"])
+
+
 if __name__ == "__main__":
     unittest.main()

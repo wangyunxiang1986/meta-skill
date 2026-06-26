@@ -1,0 +1,6 @@
+name: urqmd
+match:
+  any_of:
+    - file_exists: afterburner
+    - file_exists: osc2u/CMakeLists.txt
+    - readme_contains: UrQMD

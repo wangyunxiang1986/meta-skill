@@ -444,5 +444,26 @@ class RunLauncherTest(unittest.TestCase):
             self.assertIn("python y", br)
 
 
+    def test_input_default_resolves_project_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "proj"
+            (root / "data").mkdir(parents=True)
+            (root / ".git").mkdir()             # anchor: prevents _effective_root from descending
+            (root / "data" / "x.dat").write_text("x", encoding="utf-8")
+            profile = {"command_argv": ["./run", "{oscar_file}", "out.dat"],
+                       "inputs": {"oscar_file": "<PROJECT_ROOT>/data/x.dat"}}
+            pf = pathlib.Path(tmp) / "run_profile.json"
+            pf.write_text(json.dumps(profile), encoding="utf-8")
+            work = pathlib.Path(tmp) / "work"
+            proc = subprocess.run(
+                [sys.executable, str(LAUNCHER), "--project-root", str(root),
+                 "--work-dir", str(work), "--run-profile", str(pf), "--max-tier", "0"],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            self.assertEqual(proc.returncode, 0, proc.stdout)
+            report = json.loads((work / "verification-report.json").read_text(encoding="utf-8"))
+            self.assertIn(str(root / "data" / "x.dat"), report["resolved_command"])
+            self.assertNotIn("<PROJECT_ROOT>", report["resolved_command"])
+
+
 if __name__ == "__main__":
     unittest.main()

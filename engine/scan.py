@@ -363,6 +363,9 @@ _CPP_ARGV_IDX_RE = re.compile(r"argv\s*\[\s*(\d+)\s*\]")
 _CPP_ARGV_NAME_RE = re.compile(r"([A-Za-z_]\w*)\s*=\s*(?:ato[ifl]+\s*\(\s*)?argv\s*\[\s*(\d+)\s*\]")
 _CPP_MAIN_RE = re.compile(r"\bint\s+main\s*\([^)]*\bargv\b")
 _MAKE_EXE_RE = re.compile(r"^\s*EXE\s*[:?]?=\s*(\S+)", re.MULTILINE)
+_SHELL_SHEBANG_RE = re.compile(r"^#!\s*(?:/usr/bin/env\s+)?\S*(?:bash|sh)\b")
+_SHELL_ASSIGN_RE = re.compile(r'^\s*([A-Za-z_]\w*)=["\']?\$(\d+)', re.M)
+_SHELL_ARGV_RE = re.compile(r'\$(\d+)\b')
 
 
 def _cpp_argv_positionals(text: str):
@@ -625,6 +628,41 @@ def detect_existing_skills(root: Path) -> list:
     return sorted(out, key=lambda s: s["path"])
 
 
+def detect_shell_entrypoints(root: Path) -> List[Dict[str, object]]:
+    """Shell-script run entries the Python/C++ scanners miss: an executable shell
+    script (bash/sh shebang) that reads positional args $1..$N. The run command is
+    derived as ``./<script>``; positional NAMES come from the script's own
+    ``name=$1`` assignments (else ``arg1..argN``)."""
+    root = Path(root)
+    entries: List[Dict[str, object]] = []
+    seen = set()
+    candidates = list(root.rglob("*.sh"))
+    candidates += [p for p in root.iterdir() if p.is_file() and not p.suffix]
+    for path in sorted(set(candidates)):
+        if any(part in SKIP_DIR_NAMES for part in path.relative_to(root).parts[:-1]):
+            continue
+        text = read_text(path)
+        first = text.splitlines()[0] if text else ""
+        if not _SHELL_SHEBANG_RE.match(first):
+            continue
+        indices = [int(n) for n in _SHELL_ARGV_RE.findall(text)]
+        if not indices:
+            continue
+        rel = str(path.relative_to(root))
+        if rel in seen:
+            continue
+        seen.add(rel)
+        named = {int(i): n for n, i in _SHELL_ASSIGN_RE.findall(text)}
+        required = max(indices)
+        names = [named.get(i, "arg%d" % i) for i in range(1, required + 1)]
+        entries.append({
+            "path": rel, "purpose": "CLI entry (shell)",
+            "cli_style": "argv", "lang": "shell", "run_prefix": ["./%s" % path.name],
+            "argv_names": names, "argv_required": required, "reads_config": False,
+        })
+    return entries
+
+
 def scan_project(root: Path) -> Dict[str, object]:
     root = _effective_root(Path(root).resolve())
     files = scan_files(root)
@@ -633,6 +671,8 @@ def scan_project(root: Path) -> Dict[str, object]:
     entries = detect_entrypoints(root, py_dirs=py_dirs)
     if not entries:                              # no Python driver -> compiled C/C++ fallback
         entries = detect_cpp_entrypoints(root)
+    if not entries:                              # no compiled entry -> shell-script wrapper fallback
+        entries = detect_shell_entrypoints(root)
     entry_py = [e["path"] for e in entries]
     params = collect_parameters(root, entry_py, files["config_files"])
     outputs = discover_output_files_from_source(root, src_dirs)
