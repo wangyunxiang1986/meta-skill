@@ -1,0 +1,109 @@
+description: "SMASH (Simulating Many Accelerated Strongly-interacting Hadrons): hadronic afterburner / transport. Compiled C++ (./smash -i <config.yaml> -o <outdir>); in List modus it reads an OSCAR2013 particle list (Cooper-Frye sampler output) and propagates it to the final state -> particle_lists.oscar."
+
+# SMASH is YAML-config-driven, so the structural scanner detects 0 CLI params;
+# inject the real afterburner run knobs here. These are the List-modus keys a
+# user actually sets to run SMASH as a hadronic afterburner.
+param_meaning:
+  Modus: "运行模式; afterburner 用 'List' (读入外部 OSCAR2013 粒子列表并输运), 而非 Collider/Box"
+  Time_Step_Mode: "时间步进模式; afterburner 通常 'None' (无固定步长, 只做碰撞/衰变直到 End_Time)"
+  End_Time: "传播终止时间 [fm]; 取足够晚以输出最终态 (共振全部衰变、碰撞冻结)"
+  Nevents: "生成/输运的事件数; 对应 Cooper-Frye 过采样份数 (oversampling), List modus 会读 <prefix><Shift_Id..Shift_Id+Nevents-1>"
+  Randomseed: "随机数种子 (-1 表示按时间自动取种)"
+  File_Directory: "List modus 输入目录; 存放上游 sampler 写出的 OSCAR2013 粒子列表文件"
+  File_Prefix: "输入文件名前缀; SMASH 读 <File_Prefix><N> (CLVisc 里为 'mc_particle_list', 自带样本为 'example_list')"
+  Shift_Id: "起始文件编号; 读 <File_Prefix><Shift_Id> 起的 Nevents 个文件"
+  Particles_Format: "粒子输出格式; ['Oscar2013'] (或 root/binary); Extended: True 追加碰撞历史列"
+
+# Scanner detects 0 params for a YAML-config C++ code; inject the real knobs.
+pack_parameters:
+  - { name: Modus, default: "List", source: "config.yaml (General)" }
+  - { name: Time_Step_Mode, default: "None", source: "config.yaml (General)" }
+  - { name: End_Time, default: "1000.0", source: "config.yaml (General)" }
+  - { name: Nevents, default: "1", source: "config.yaml (General)" }
+  - { name: File_Directory, default: "(OSCAR2013 list dir)", source: "config.yaml (Modi.List)" }
+  - { name: File_Prefix, default: "example_list", source: "config.yaml (Modi.List)" }
+  - { name: Shift_Id, default: "0", source: "config.yaml (Modi.List)" }
+  - { name: Particles_Format, default: "[Oscar2013] Extended", source: "config.yaml (Output)" }
+
+# SMASH's own output files (only what the minimal List run writes belong here).
+pack_outputs:
+  - { file: "particle_lists.oscar", source: "smash (Output.Particles)" }
+  - { file: "config.yaml", source: "smash (resolved config copy in output dir)" }
+
+# Produced only when extra outputs are enabled; documented for awareness, NOT
+# part of the minimal-run output contract.
+downstream_artifacts:
+  - { file: "full_event_history.oscar", source: "smash (Output.Collisions, if enabled)" }
+  - { file: "particle_lists.h5", source: "CLVisc after_burner.py (repacks .oscar into HDF5)" }
+
+output_meaning:
+  "particle_lists.oscar": "最终态强子列表 (OSCAR2013: '# event N out M' 头 + 每行 't x y z mass p0 px py pz pdg ID charge' [Extended 追加碰撞历史列]; 单位 fm/GeV)"
+  "config.yaml": "SMASH 实际使用的完整解析后配置 (写入输出目录, 便于复现)"
+  "full_event_history.oscar": "逐次相互作用/碰撞记录 (仅开启 Collisions 输出时)"
+  "particle_lists.h5": "CLVisc 后处理把逐事件 .oscar 重打包成 HDF5 (group particle_list/<col>)"
+
+observable_locator:
+  dNchdeta: { file: "particle_lists.oscar" }
+  v2: { file: "particle_lists.oscar" }
+
+intent_rules:
+  - match: ["强子输运", "afterburner", "跑 SMASH", "run smash", "hadronic transport"]
+    plan: { set_param: Modus, extract: dNchdeta }
+  - match: ["过采样", "oversampling", "改事件数", "Nevents"]
+    plan: { set_param: Nevents, extract: dNchdeta }
+
+run_profiles:
+  minimal:
+    # Command NOT engine-derivable: SMASH is a compiled binary with a flag-based
+    # CLI (-i config -o outdir), which the structural scanner cannot reconstruct.
+    # So the pack supplies `command` directly (the documented `profile_command_argv`
+    # fallback). No `driver` block on purpose: a stray scanned entry could otherwise
+    # be preferred over this command.
+    command:
+      - "./smash"
+      - "-i"
+      - "config.yaml"
+      - "-p"
+      - "{root}/input/particles.txt"
+      - "-d"
+      - "{root}/input/decaymodes.txt"
+      - "-o"
+      - "{work}/out"
+      - "-f"
+      - "-q"
+    run_in: work                # isolated scratch dir; never touch the source tree
+    # SMASH's build is heavy (Pythia8 + Eigen + cmake); the minimal run reuses the
+    # PREBUILT binary at build/smash rather than recompiling. If it's absent the
+    # prepare `cp` fails and the launcher records a graceful blocker.
+    build: []
+    # External-input roots the user declares (data location is never in source).
+    # Defaults point at SMASH's bundled sample List input so the smoke run is
+    # self-contained; override with --input to afterburn a real sampler output
+    # (e.g. --input list_dir=<event>/before --input list_prefix=mc_particle_list).
+    inputs:
+      list_dir: "<PROJECT_ROOT>/input/list"
+      list_prefix: "example_list"
+    # prepare: stage the prebuilt binary + synthesize a List-modus config.yaml
+    # pointing at the declared input list (File_Directory is an absolute path so
+    # it works from the scratch cwd; Nevents=1 reads only <prefix>0).
+    prepare:
+      - "mkdir -p {work}/out"
+      - "cp {root}/build/smash ."
+      - "python3 -c \"open('config.yaml','w').write(chr(10).join(['General:','    Modus: List','    Time_Step_Mode: None','    End_Time: 1000.0','    Nevents: 1','    Randomseed: -1','Output:','    Particles:','        Format: [Oscar2013]','        Extended: True','Modi:','    List:','        File_Directory: {list_dir}','        File_Prefix: {list_prefix}','        Shift_Id: 0',''])+chr(10))\""
+    tier1_output: particle_lists.oscar
+    tier2_observable: dNchdeta
+    needs: []
+
+param_constraints:
+  Modus: { choices: ["List", "Collider", "Box", "Sphere"], note: "afterburner 用 List" }
+  Time_Step_Mode: { choices: ["None", "Fixed"], note: "afterburner 用 None" }
+  Nevents: { range: [1, 100000], note: "过采样份数" }
+  End_Time: { range: [1.0, 100000.0], note: "传播终止时间 fm" }
+
+demos:
+  - title: "minimal afterburner smoke run (bundled sample list)"
+    intent: "用 SMASH 自带 OSCAR2013 样本列表跑一次最小 List-modus 输运, 出 particle_lists.oscar"
+    args: {Modus: "List", Nevents: "1"}
+  - title: "afterburn a Cooper-Frye sampler output"
+    intent: "把上游 sampler 的 mc_particle_list 输运到最终态 (真实 AA 链路)"
+    args: {File_Prefix: "mc_particle_list", Nevents: "10"}

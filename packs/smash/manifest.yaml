@@ -1,0 +1,6 @@
+name: smash
+match:
+  any_of:
+    - file_exists: src/smash.cc
+    - file_exists: input/decaymodes.txt
+    - readme_contains: SMASH
