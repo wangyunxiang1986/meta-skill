@@ -87,12 +87,24 @@ Append successful runs to `references/verified-runs.md` and blocked runs to
 `references/blocked-runs.md`. Include the tier reached, resolved command, output or
 blocker, and the date. Do not overwrite earlier evidence.
 
-### 3.3 迭代更新 (Iterate)
+### 3.3 迭代更新 (Iterate) + 确认门禁 (Confirmation Gate)
 
 Then **confirm + iterate**: present to the user `project-understanding.md`, the generated
 skill's capabilities, and `verification-report.md` (which tier was reached). Ask them to
 confirm parameter meanings, run flow, and that the observable is what they care about. On
 feedback, edit the relevant `packs/<model>/` (knowledge.yaml / extractors.py), then loop back to module 2 to regenerate the skill and re-test.
+
+This confirmation is **enforced**, not just advisory. Every generated skill ships a
+confirmation gate (`references/confirmation.yaml` + `scripts/confirm.py`): the generated
+`run.py` **refuses to run for real work until a human confirms** those three items, and each
+`verification-report.md` is stamped `confirmation: CONFIRMED/UNCONFIRMED`. Validation
+(module 3.1, via `run_launcher.py`) is intentionally left ungated so the evidence the user
+reviews can be produced first. Record the user's confirmation with:
+```bash
+python "<WORK_DIR>/generated-skill/scripts/confirm.py" --confirm --by "<name>"
+```
+(or edit `references/confirmation.yaml` by hand). Overriding without confirmation is possible
+but discouraged (`run.py --force-unconfirmed`).
 
 ## Behavioral Norms
 

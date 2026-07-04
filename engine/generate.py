@@ -622,11 +622,16 @@ def render_skill_md(scan: Dict[str, object], pack: Optional[Dict]) -> str:
         f"## Workflow\n\n"
         f"1. Read `references/project-understanding.md` and `references/run-modes.md`.\n"
         f"2. Validate requested parameter edits with `scripts/config.py`.\n"
-        f"3. Run through `scripts/run.py` when a run profile is available.\n"
+        f"3. Run through `scripts/run.py` when a run profile is available. "
+        f"`run.py` is gated: it refuses to run until a human confirms this skill "
+        f"(see **Confirmation Gate** below).\n"
         f"4. Summarize outputs with `scripts/analysis.py` and make diagnostics with "
         f"`scripts/visualize.py`.\n"
         f"5. Record successful runs in `references/verified-runs.md` and blockers in "
-        f"`references/blocked-runs.md`.\n\n"
+        f"`references/blocked-runs.md`.\n"
+        f"6. Present `references/project-understanding.md`, `references/run-modes.md`, and "
+        f"the latest `verification-report.md` to the user, then record their confirmation "
+        f"with `scripts/confirm.py` (see **Confirmation Gate**).\n\n"
         f"## Entry Points\n\n{entry_lines}\n\n"
         f"## README Run Commands\n\n{readme_lines}\n\n"
         f"## References\n\n"
@@ -639,9 +644,11 @@ def render_skill_md(scan: Dict[str, object], pack: Optional[Dict]) -> str:
         f"- `references/verified-runs.md`\n"
         f"- `references/blocked-runs.md`\n"
         f"- `references/model-gaps.md`\n"
+        f"- `references/confirmation.yaml` (the confirmation-gate record)\n"
         f"- `evals/evals.json` (starter eval tasks for skill-creator)\n\n"
         f"## Scripts\n\n"
         f"- `scripts/config.py`: validate parameter choices, ranges, and exclusions.\n"
+        f"- `scripts/confirm.py`: the confirmation gate; check status or record a human's confirmation.\n"
         f"{run_line}\n"
         f"- `scripts/analysis.py`: public analysis entry; wraps output summary helpers.\n"
         f"- `scripts/visualize.py`: create diagnostic plots or text diagnostics.\n"
@@ -652,6 +659,15 @@ def render_skill_md(scan: Dict[str, object], pack: Optional[Dict]) -> str:
         f"## Validation Status\n\n"
         f"Check `references/verified-runs.md` and the latest `verification-report.md` from "
         f"the run directory before claiming the skill works in this environment.\n\n"
+        f"## Confirmation Gate\n\n"
+        f"This skill was auto-generated. It is **not confirmed for real use** until a human "
+        f"reviews it and confirms three things -- that the parameter meanings, the run flow, "
+        f"and the extracted observable are correct. Until then, `scripts/run.py` refuses to "
+        f"run (validation via `scripts/run_launcher.py` still works, so you can produce the "
+        f"evidence to review). Check status with `python scripts/confirm.py`; record a "
+        f"confirmation with `python scripts/confirm.py --confirm --by \"Your Name\"`. The "
+        f"record lives in `references/confirmation.yaml` and is stamped into every "
+        f"`verification-report.md`.\n\n"
         f"## If Blocked\n\n"
         f"Do not report a deeper tier as successful. Record the blocker, inspect "
         f"`references/model-gaps.md`, update the generated scripts or source knowledge pack, "
@@ -662,6 +678,29 @@ def render_skill_md(scan: Dict[str, object], pack: Optional[Dict]) -> str:
         f"directory. Starter test tasks are in `evals/evals.json`; skill-creator runs "
         f"them with and without this skill, grades the results, and iterates.\n"
         f"{intent}"
+    )
+
+
+def render_confirmation() -> str:
+    """Blank confirmation-gate record. A human flips each item to ``yes`` and
+    fills ``confirmed_by`` + ``date`` (or runs ``scripts/confirm.py --confirm``)
+    after reviewing the skill. ``run.py`` refuses to run while this is unconfirmed."""
+    return (
+        "# Confirmation gate for this generated skill.\n"
+        "#\n"
+        "# This skill is NOT validated for real use until a human reviews it and\n"
+        "# confirms the three items below. Review references/project-understanding.md,\n"
+        "# references/run-modes.md, and the latest verification-report.md, then either\n"
+        "# edit this file (flip each item to \"yes\" and fill confirmed_by + date) or run:\n"
+        "#\n"
+        "#   python scripts/confirm.py --confirm --by \"Your Name\"\n"
+        "#\n"
+        "# run.py refuses to run while this gate is unconfirmed (override: --force-unconfirmed).\n"
+        "parameter_meanings: no\n"
+        "run_flow: no\n"
+        "observable: no\n"
+        "confirmed_by:\n"
+        "date:\n"
     )
 
 
@@ -681,6 +720,7 @@ _GENERATED_FILES = [
     "references/run-modes.md",
     "references/demos.md",
     "references/model-gaps.md",
+    "references/confirmation.yaml",
     "references/project-profile.json",
     "references/project-understanding.md",
     "references/verified-runs.md",
@@ -690,6 +730,7 @@ _GENERATED_FILES = [
     "scripts/verify_environment.py",
     "scripts/analyze_outputs.py",
     "scripts/config.py",
+    "scripts/confirm.py",
     "scripts/run.py",
     "scripts/analysis.py",
     "scripts/visualize.py",
@@ -733,6 +774,7 @@ def generate(scan: Dict[str, object], pack: Optional[Dict], out_dir: Path) -> Di
     write_file(out_dir / "references/run-modes.md", render_run_modes(scan, knowledge, project_root))
     write_file(out_dir / "references/demos.md", render_demos(scan, knowledge, project_root))
     write_file(out_dir / "references/model-gaps.md", render_model_gaps(scan, pack))
+    write_file(out_dir / "references/confirmation.yaml", render_confirmation())
     write_file(out_dir / "references/verified-runs.md", "# Verified Runs\n\n")
     write_file(out_dir / "references/blocked-runs.md", "# Blocked Runs\n\n")
     status = readme_status(scan)
@@ -746,7 +788,7 @@ def generate(scan: Dict[str, object], pack: Optional[Dict], out_dir: Path) -> Di
                _understanding.render_project_understanding(scan, pack, redact_paths=True))
     (out_dir / "scripts").mkdir(parents=True, exist_ok=True)
     for tmpl in ("verify_environment.py", "analyze_outputs.py", "config.py",
-                 "run.py", "analysis.py", "visualize.py"):
+                 "run.py", "analysis.py", "visualize.py", "confirm.py"):
         src = TEMPLATES / tmpl
         if src.exists():
             shutil.copy(src, out_dir / "scripts" / tmpl)

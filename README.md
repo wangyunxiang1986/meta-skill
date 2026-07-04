@@ -150,9 +150,11 @@ generated-skill/
 │   ├── demos.md             # derived baseline + pack-curated worked demos
 │   ├── verified-runs.md     # 固化: known-good command + tier (written by a real run)
 │   ├── blocked-runs.md      # blocked attempts + exact blocker
+│   ├── confirmation.yaml    # confirmation-gate record (human must confirm before use)
 │   └── model-gaps.md        # what a human/pack still needs to fill
 └── scripts/
     ├── config.py            # set/check parameters, constraints, ranges, exclusivity
+    ├── confirm.py           # confirmation gate: status / record human confirmation
     ├── run.py               # public run entry; wraps run_launcher.py when available
     ├── analysis.py          # public analysis entry; wraps analyze_outputs.py
     ├── visualize.py         # diagnostic visualization/report entry
