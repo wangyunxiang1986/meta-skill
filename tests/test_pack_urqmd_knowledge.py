@@ -31,6 +31,13 @@ class UrqmdKnowledgeTest(unittest.TestCase):
             self.assertEqual(prof["tier1_output"], "particles_out.dat")
             self.assertIn("oscar_file", prof.get("inputs", {}))
             self.assertTrue(prof.get("build"))
+            # prepare must LOCATE tables.dat / afterburner (their directory varies
+            # by fork) rather than assume the repo root -- regression for a fork
+            # whose tables.dat lives in a urqmd-afterburner/ subdir.
+            prep = " ".join(prof.get("prepare") or [])
+            self.assertIn("find", prep)
+            self.assertIn("tables.dat", prep)
+            self.assertNotIn("{root}/tables.dat", prep)
             params = (out / "references/parameters.md").read_text(encoding="utf-8")
             self.assertIn("tim", params)         # injected pack_parameter
             outputs = (out / "references/outputs.md").read_text(encoding="utf-8")

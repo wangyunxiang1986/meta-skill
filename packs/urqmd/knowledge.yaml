@@ -2,9 +2,11 @@
 # The bash `afterburner` entry is engine-derived (shell detector); this pack
 # only supplies meaning, run-knobs, and the bundled sample input.
 
+description: "UrQMD (Ultra-relativistic Quantum Molecular Dynamics) hadronic afterburner. A bash `afterburner` driver chains osc2u (OSCAR -> UrQMD converter) into the UrQMD transport: it reads an OSCAR particle list (upstream Cooper-Frye sampler output), then propagates the hadrons through rescattering + resonance decays to the final state -> particles_out.dat, from which charged dN/deta and v2 are extracted."
+
 param_meaning:
-  input_file: "OSCAR1997A particle input (upstream Cooper-Frye sampler output)"
-  output_file: "Final state particle list (custom format: ID charge mass pT phi eta)"
+  input_file: "OSCAR1997A particle input (upstream Cooper-Frye sampler output; header 'OSC1997A' / 'final_id_p_x')"
+  output_file: "Final state particle list (columns: id charge mass px py pz t x y z; pT/phi/eta are derived from px,py,pz)"
   tim: "Evolution time range; run to very late to output only final state (tim <t_end> <t_out>)"
   cto: "Read OSCAR initial state from ftn10 (cto 40 2)"
   f13_f20: "Suppress f13/f14/f15/f16/f18/f19/f20 output channels, keep only f30"
@@ -17,19 +19,25 @@ pack_parameters:
   - { name: cto, default: "40 2", source: "urqmd.conf" }
   - { name: f13_f20, default: "suppressed", source: "urqmd.conf" }
 
+# tables.dat is a shipped INPUT dependency (UrQMD cross-section tables), not a
+# produced output, so it is intentionally absent from pack_outputs.
 pack_outputs:
   - { file: "particles_out.dat", source: "urqmd (ftn30)" }
   - { file: "urqmd_input.dat", source: "osc2u" }
-  - { file: "tables.dat", source: "(collision tables, repo)" }
 
 output_meaning:
-  "particles_out.dat": "Final state hadron list (per-event '# event n particles m' header + 'ID charge mass pT phi eta' lines)"
+  "particles_out.dat": "Final state hadron list (per-event '# event n particles m' header + 'id charge mass px py pz t x y z' lines; charged dN/deta & v2 are computed from px,py,pz)"
   "urqmd_input.dat": "Intermediate file: osc2u converts OSCAR to UrQMD input format"
-  "tables.dat": "UrQMD collision cross-section tables (shipped in repo)"
 
 observable_locator:
   dNchdeta: { file: "particles_out.dat" }
   v2: { file: "particles_out.dat" }
+
+intent_rules:
+  - match: ["强子输运", "afterburner", "跑 urqmd", "run urqmd", "hadronic rescattering", "末态强子"]
+    plan: { input: oscar_file, extract: dNchdeta }
+  - match: ["看椭圆流 v2", "elliptic flow", "final-state v2", "末态 v2"]
+    plan: { input: oscar_file, extract: v2 }
 
 run_profiles:
   minimal:
@@ -47,7 +55,32 @@ run_profiles:
       - "cmake -S {root} -B {work}/build"
       - "cmake --build {work}/build"
     prepare:
-      - "cp {work}/build/osc2u/osc2u {work}/build/urqmd/urqmd {root}/afterburner {root}/tables.dat ."
+      # binaries come from the build dir; the afterburner driver + the UrQMD
+      # tabinit data (tables.dat) live in the checkout but their exact directory
+      # varies by fork -- locate them instead of assuming the repo root.
+      - "cp {work}/build/osc2u/osc2u {work}/build/urqmd/urqmd ."
+      - "cp \"$(find {root} -name afterburner -type f | head -1)\" ."
+      - "cp \"$(find {root} -name tables.dat | head -1)\" ."
     tier1_output: particles_out.dat
     tier2_observable: dNchdeta
     needs: []
+
+# The UrQMD afterburner is driven by a fixed urqmd.conf; these are the few knobs a
+# user might touch. Most are effectively fixed by the afterburner wrapper -- notes say
+# so honestly rather than inventing tunability.
+param_constraints:
+  tim:
+    note: "两个值 't_end t_out' (fm/c); 取足够晚让强子输运冻结, 默认 '8000 8000' 只输出末态"
+  cto:
+    choices: ["40 2"]
+    note: "OSCAR 初态读取模式; afterburner 固定用 '40 2' (从 ftn10 读 OSCAR), 一般不改"
+  f13_f20:
+    note: "抑制 f13-f20 输出通道, 只保留 f30 (末态粒子); 一般不改"
+
+demos:
+  - title: "minimal afterburner smoke run (bundled OSCAR sample)"
+    intent: "用自带 data3/oscar.dat 跑一次 osc2u -> UrQMD 强子输运, 出 particles_out.dat"
+    args: {}
+  - title: "afterburn a Cooper-Frye sampler output"
+    intent: "把上游 sampler 的 OSCAR 粒子列表输运到末态 (真实 AA 链路; --input oscar_file=<event>/oscar.dat)"
+    args: {}

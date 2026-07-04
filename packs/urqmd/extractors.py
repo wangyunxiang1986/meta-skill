@@ -2,9 +2,11 @@
 """URQMD afterburner observables from the custom output particle file.
 
 Format: per-event header `# event n particles m`, then particle lines
-`ID charge mass pT phi eta`. Computes charged dN/deta and v2{2} (two-particle
-Q-cumulant). Returns a dict; signals failure with {"error": ...} rather than
-raising, so the launcher records a graceful blocker (not a crash).
+`id charge mass px py pz t x y z` (verified against the osc2u+urqmd ftn30 output;
+columns 3-5 are the Cartesian momentum, NOT pT/phi/eta). pT, phi and pseudo-
+rapidity eta are computed from (px, py, pz). Computes charged dN/deta and v2{2}
+(two-particle Q-cumulant). Returns a dict; signals failure with {"error": ...}
+rather than raising, so the launcher records a graceful blocker (not a crash).
 """
 import math
 import os
@@ -22,8 +24,17 @@ def _find(out_dir, name="particles_out.dat"):
     return None
 
 
+def _pseudorapidity(px, py, pz):
+    """eta = 0.5 ln((|p|+pz)/(|p|-pz)); guard the collinear/degenerate cases."""
+    p = math.sqrt(px * px + py * py + pz * pz)
+    if p <= abs(pz) or p == 0.0:
+        return math.copysign(20.0, pz)          # ~beam rapidity sentinel
+    return 0.5 * math.log((p + pz) / (p - pz))
+
+
 def _parse(path):
-    """Yield per-event lists of (charge, phi, eta)."""
+    """Yield per-event lists of (charge, phi, eta) derived from the Cartesian
+    momentum columns `id charge mass px py pz ...`."""
     events = []
     cur = None
     with open(path, encoding="utf-8", errors="replace") as fh:
@@ -40,10 +51,11 @@ def _parse(path):
                 continue
             try:
                 charge = int(float(parts[1]))
-                phi = float(parts[4])
-                eta = float(parts[5])
+                px, py, pz = float(parts[3]), float(parts[4]), float(parts[5])
             except ValueError:
                 continue
+            phi = math.atan2(py, px)
+            eta = _pseudorapidity(px, py, pz)
             cur.append((charge, phi, eta))
     return events
 
