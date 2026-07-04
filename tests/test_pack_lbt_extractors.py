@@ -5,6 +5,22 @@ import unittest
 
 EXTRACTORS = pathlib.Path(__file__).resolve().parents[1] / "packs" / "lbt" / "extractors.py"
 
+# Golden regression (A1): positive (10 cols: id px py pz E x y z t CAT) minus negative
+# (9 cols). 3 positive, 1 negative -> net = 2; max pT = sqrt(6^2+8^2) = 10.0.
+GOLDEN = {
+    "observable": "dNdpT_parton",
+    "out_subdir": "",
+    "files": {
+        "results_analysis/hydro_0/positive.dat": (
+            "# 0 2\n21 3.0 4.0 0.0 5.0 0 0 0 0.6 1\n1 6.0 8.0 0.0 10.0 0 0 0 0.6 1\n"
+            "# 1 1\n21 0.0 1.0 0.0 1.0 0 0 0 0.6 1\n"),
+        "results_analysis/hydro_0/negative.dat": (
+            "# 0 1\n21 0.0 1.0 0.0 1.0 0 0 0 0.6\n"),
+    },
+    "expect": {"n_positive": 3, "n_negative": 1, "n_net": 2, "pt_max": 10.0},
+    "tol": 1e-5,
+}
+
 
 def _load():
     spec = importlib.util.spec_from_file_location("lbt_extractors", EXTRACTORS)

@@ -127,6 +127,13 @@ run_profiles:
     prepare:
       - "cp {work}/build/lbt ."
       - "python3 -c \"open('LBTinput_{jobid}.txt','w').write(open('{root}/LBTinput.txt').read().rstrip()+chr(10)+'{rate_path}'+chr(10)+'bulk3D_path'+chr(10)+'{bulk3D_path}'+chr(10)+'parton_path'+chr(10)+'{parton_path}'+chr(10))\""
+      # Grid-consistency guard: LBT reads bulk3d.dat as ntau*nx*ny*neta records
+      # (LBT.cpp:5720-5751). If the supplied bulk3D grid disagrees with LBTinput's
+      # nxhydro/nyhydro/netahydro, LBT silently reads misaligned medium -> wrong
+      # physics. Verify the record count matches; a mismatch fails prepare (blocker)
+      # instead of producing a bogus positive.dat. NOTE: geometry.dat is the jet
+      # sampling map (fixed 10000 rows), NOT the medium grid -- do not check it here.
+      - "python3 -c \"import math; L=open('LBTinput_{jobid}.txt').read().splitlines(); g=[i for i,l in enumerate(L) if 'nxhydro' in l][0]; v=L[g+1].split(); t0,nx,ny,ne,dt=float(v[0]),int(v[1]),int(v[2]),int(v[3]),float(v[4]); te=float(open('{bulk3D_path}/tau.dat').read().split()[0]); nt=math.floor((te-t0)/dt+0.5)+1; exp=nt*nx*ny*ne; act=sum(1 for l in open('{bulk3D_path}/bulk3d.dat') if l.strip()); assert abs(act-exp)<=4, 'bulk3D grid mismatch: LBTinput %dx%dx%d over %d tau steps expects %d records, bulk3d.dat has %d'%(nx,ny,ne,nt,exp,act); print('bulk3D grid OK: %d records (~%d expected)'%(act,exp))\""
     tier1_output: positive.dat
     tier2_observable: dNdpT_parton
     needs: []
