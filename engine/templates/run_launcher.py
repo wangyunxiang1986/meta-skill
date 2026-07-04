@@ -160,6 +160,24 @@ def _subst(token, ctx):
         return str(token)
 
 
+_ANGLE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z_][\w-]*>")
+
+
+def _unfilled_placeholders(tokens):
+    """Angle-bracket placeholders (e.g. ``<coll_sys>``) that the engine emitted for a
+    positional the matched pack could not name. They must be filled before running; if
+    any survive into the resolved command the program receives the literal placeholder
+    text and fails confusingly downstream (e.g. ``int('<event0>')``). Detect them so the
+    launcher stops at T0 with a clear message. ``<PROJECT_ROOT>`` is already substituted
+    away before this runs, so only genuinely-unfilled placeholders remain."""
+    found = []
+    for tok in tokens:
+        for m in _ANGLE_PLACEHOLDER_RE.findall(str(tok)):
+            if m not in found:
+                found.append(m)
+    return found
+
+
 def _resolve_inputs(decl, cli_inputs):
     """Declared external-input roots: dict name->default(or null) or list of names,
     overridden by ``--input name=path``. Returns {name: value-or-None}. The data
@@ -252,6 +270,28 @@ def _write_blocked_run(report, run_profile_path):
         fh.write(prefix + "\n".join(md))
 
 
+def _confirmation_status(skill_dir):
+    """Read ``references/confirmation.yaml`` (flat ``key: value``) and return a
+    short label for the report. The gate is ENFORCED by run.py; here we only
+    STAMP the verification report honestly so a reader sees whether a human has
+    confirmed this skill. Self-contained (no import of confirm.py) so the launcher
+    stays runnable standalone."""
+    path = Path(skill_dir) / "references" / "confirmation.yaml"
+    if not path.exists():
+        return "unknown (no confirmation.yaml)"
+    data = {}
+    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        key, val = line.split(":", 1)
+        data[key.strip()] = val.strip()
+    items = ("parameter_meanings", "run_flow", "observable")
+    if data.get("confirmed_by") and all(str(data.get(i, "")).lower() == "yes" for i in items):
+        return f"CONFIRMED by {data['confirmed_by']}"
+    return "UNCONFIRMED"
+
+
 def _write(report, work, run_profile=None):
     if run_profile:
         _write_verified_run(report, run_profile)
@@ -270,6 +310,7 @@ def _write(report, work, run_profile=None):
         f"- tier1 output: `{report['tier1_output']}`",
         f"- observable: `{report['observable']}`",
         f"- plot: `{report['plot']}`",
+        f"- confirmation: **{report.get('confirmed', 'unknown')}**",
         f"- blockers: {report['blockers'] or 'none'}", "",
     ]
     (work / "verification-report.md").write_text("\n".join(md), encoding="utf-8")
@@ -300,7 +341,8 @@ def main():
     work.mkdir(parents=True, exist_ok=True)
     profile = json.loads(Path(args.run_profile).read_text(encoding="utf-8"))
     report = {"tier_reached": 0, "blockers": [], "resolved_command": None,
-              "tier1_output": None, "observable": None, "plot": None, "environment": None}
+              "tier1_output": None, "observable": None, "plot": None, "environment": None,
+              "confirmed": _confirmation_status(Path(__file__).resolve().parent.parent)}
 
     # --- T0: verify environment, edit config, resolve command (no execution) ---
     report["environment"] = _environment_report(root, profile.get("needs"))
@@ -354,8 +396,12 @@ def main():
                 f"required input '{name}' not provided (pass --input {name}=/path)")
     argv = [_subst(str(tok).replace("<PROJECT_ROOT>", str(root)), ctx) for tok in command_argv]
     report["resolved_command"] = " ".join(argv)
+    for ph in _unfilled_placeholders(argv):    # e.g. <coll_sys> the pack could not name
+        report["blockers"].append(
+            f"unfilled command placeholder {ph}: the matched pack could not name this "
+            f"positional -- edit run_profile.json command_argv to replace {ph} with a value")
     report["tier_reached"] = 0
-    if report["blockers"]:                     # missing required inputs -> stop at T0
+    if report["blockers"]:                     # missing required inputs / unfilled placeholders -> stop at T0
         _write(report, work, args.run_profile)
         return 0
     if args.max_tier < 1:

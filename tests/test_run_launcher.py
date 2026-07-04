@@ -40,6 +40,37 @@ class RunLauncherTest(unittest.TestCase):
             self.assertIn("initial = trento", edited)
             self.assertIn(str(work), report["resolved_command"])
 
+    def test_unfilled_angle_placeholder_blocks_at_t0(self):
+        # C1: an engine-emitted <name> placeholder the pack could not fill must stop
+        # the run at T0 with a clear blocker, not be passed literally to the program.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "proj"
+            (root / "pyvisc").mkdir(parents=True)
+            (root / ".git").mkdir()
+            (root / "pyvisc" / "run.py").write_text("import sys\n", encoding="utf-8")
+            profile = {
+                # <coll_sys>/<event0>/<event1> unfilled -> must block before running
+                "command_argv": ["python", "run.py", "<coll_sys>", "{cent}", "{gpu}",
+                                 "<event0>", "<event1>"],
+                "work_subdir": "pyvisc",
+                "tier1_output": "hypersf.dat",
+                "tier2_observable": "dNchdeta",
+            }
+            pf = pathlib.Path(tmp) / "run_profile.json"
+            pf.write_text(json.dumps(profile), encoding="utf-8")
+            work = pathlib.Path(tmp) / "work"
+            proc = subprocess.run(
+                [sys.executable, str(LAUNCHER), "--project-root", str(root),
+                 "--work-dir", str(work), "--run-profile", str(pf),
+                 "--cent", "0_5", "--gpu", "0", "--max-tier", "1"],  # tier 1 would run if not blocked
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            report = json.loads((work / "verification-report.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["tier_reached"], 0)                  # never reached T1
+            blockers = " ".join(report["blockers"])
+            self.assertIn("<coll_sys>", blockers)
+            self.assertIn("<event0>", blockers)
+            self.assertIn("placeholder", blockers)
+
     def test_t0_records_environment_check(self):
         # Engine-level test: synthetic, model-agnostic fixture (no CLVisc names).
         with tempfile.TemporaryDirectory() as tmp:
