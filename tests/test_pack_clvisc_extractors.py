@@ -5,6 +5,16 @@ import unittest
 
 EX = pathlib.Path(__file__).resolve().parents[1] / "packs" / "clvisc" / "extractors.py"
 
+# Golden regression (A1): dN/deta table (eta value) -> the mid-rapidity value at
+# eta=0 must be read back exactly.
+GOLDEN = {
+    "observable": "dNchdeta",
+    "out_subdir": "event0",
+    "files": {"event0/dNdEta_mc_charged.dat": "-1 100\n0 150\n1 120\n"},
+    "expect": {"eta0": 150.0},
+    "tol": 1e-3,
+}
+
 
 def _load():
     spec = importlib.util.spec_from_file_location("clvisc_ex", EX)
