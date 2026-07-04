@@ -16,6 +16,12 @@ from typing import Dict, Iterable, List, Optional
 SKIP_DIR_NAMES = {
     ".git", "__pycache__", "build", "dist", ".pytest_cache",
     ".mypy_cache", ".venv", "venv", "node_modules",
+    # vendored / third-party trees: their params, build targets, entries and
+    # config files are NOT this project's run surface. Excluding them keeps the
+    # scan focused on the project itself (pack matching uses direct path checks,
+    # so a pack marker inside such a tree is unaffected by this skip).
+    "3rdparty", "3rd_party", "third_party", "thirdparty",
+    "external", "extern", "vendor", "subprojects", "_deps",
 }
 
 _EXT = {

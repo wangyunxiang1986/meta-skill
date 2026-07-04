@@ -24,6 +24,41 @@ class ScanFilesTest(unittest.TestCase):
             self.assertTrue(result["readme_path"])
 
 
+class VendoredExclusionTest(unittest.TestCase):
+    """Vendored / third-party trees must not pollute the scan (B1). Their params,
+    build targets, entries and config files are not this project's run surface."""
+
+    def test_vendored_trees_excluded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            # the project's own surface
+            (root / "src").mkdir()
+            (root / "src" / "main.cpp").write_text("int main(int argc,char**argv){}", encoding="utf-8")
+            (root / "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.0)\n", encoding="utf-8")
+            (root / "README.md").write_text("demo\n", encoding="utf-8")
+            # vendored noise that must be ignored
+            for vend in ("3rdparty", "external", "third_party", "subprojects", "_deps"):
+                d = root / vend / "libfoo"
+                d.mkdir(parents=True)
+                (d / "CMakeLists.txt").write_text("project(foo)\n", encoding="utf-8")
+                (d / "cli.py").write_text(
+                    "import argparse;p=argparse.ArgumentParser();p.add_argument('--vend');p.parse_args()",
+                    encoding="utf-8")
+                (d / ".travis.yml").write_text("language: cpp\n", encoding="utf-8")
+
+            files = scan.scan_files(root)
+            joined = " ".join(files["build_files"] + files["config_files"] + files["source"])
+            for vend in ("3rdparty", "external", "third_party", "subprojects", "_deps"):
+                self.assertNotIn(vend, joined, "%s leaked into scan" % vend)
+            # the project's own CMakeLists is still a build target; vendored ones are not
+            targets = scan.build_targets(root)
+            self.assertIn(".", targets)                       # root-level build kept
+            self.assertFalse(any("3rdparty" in t or "external" in t for t in targets))
+            # the vendored argparse param must not appear
+            sc = scan.scan_project(root)
+            self.assertNotIn("vend", [p.get("name") for p in sc.get("parameters", [])])
+
+
 class EffectiveRootTest(unittest.TestCase):
     def test_descends_single_wrapper_dir(self):
         # A checkout where the real project sits one level under an otherwise
