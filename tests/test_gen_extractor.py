@@ -69,6 +69,33 @@ def extract(o, d, a):
         self.assertFalse(r["generated"])
         self.assertIn("hand off", r["hint"])
 
+    def test_header_kv_generator_is_name_addressed(self):
+        # The second paradigm now lives here too: a '# key = value' header reader keyed by
+        # NAME, so no physics_map and no positional column to mis-read.
+        src = gen_extractor.generate_header_kv_extractor_source(r"\d\.dat")
+        self.assertNotIn("__PATTERN__", src)               # pattern substituted in
+        self.assertIn(r"\d\.dat", src)
+        compile(src, "<gen-kv>", "exec")                   # valid Python
+
+    def test_generate_from_truth_dispatches_by_paradigm(self):
+        kv = gen_extractor.generate_from_truth(
+            {"paradigm": "header_kv", "fields": ["mult"]}, file_pattern=r"\d\.dat")
+        self.assertEqual(kv["addressing"], "name")
+        compile(kv["source"], "<kv>", "exec")
+        col = gen_extractor.generate_from_truth(
+            {"paradigm": "cpp_stream", "fields": FIELDS},
+            physics_map=GOOD_MAP, out_filename="positive.dat")
+        self.assertEqual(col["addressing"], "position")
+        self.assertIn("float(p[1]), float(p[2]), float(p[3])", col["source"])
+
+    def test_columnar_paradigm_without_physics_map_hands_off(self):
+        # position-addressed output + no physics_map -> loud hand-off, never a guess.
+        with self.assertRaises(KeyError):
+            gen_extractor.generate_from_truth(
+                {"paradigm": "cpp_stream", "fields": FIELDS}, out_filename="positive.dat")
+        with self.assertRaises(ValueError):
+            gen_extractor.generate_from_truth({"paradigm": "unknown", "fields": []})
+
 
 if __name__ == "__main__":
     unittest.main()
