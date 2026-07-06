@@ -115,7 +115,43 @@ but discouraged (`run.py --force-unconfirmed`).
   it directly); `agents/openai.yaml` is the Codex manifest; for other platforms (e.g. Kimi)
   detect the required skill format first, then emit it.
 
-## Adding a model
+## Adding a model (grounded two-pass drafting)
 
 Add `packs/<model>/{manifest.yaml, knowledge.yaml, extractors.py}` (copy `packs/_template/`).
 The engine needs no change; an unmatched checkout falls back to a generic structural skill.
+
+A pack is authored (by a human or an LLM reading the checkout) in **two passes**, because
+the observable layer MUST be grounded in a REAL run, not imagined — the rule that prevents
+a mis-parse like the URQMD column bug (py read as phi, pz as eta: "T2 passed" but the
+physics was wrong).
+
+**Pass 1 — structure & run recipe (before any run).** From the scan
+(`engine.understanding`) draft the parts derivable from code: `description`,
+`param_meaning`/`pack_parameters`, `param_constraints`, `intent_rules`, `manifest`
+match markers, and the `run_profiles.minimal` **run recipe** (driver/command, build,
+prepare, inputs, `base_config`/`config_edits`, `tier1_output`). Do NOT write the
+observable layer yet. Then validate to **T1** (module 3.1, `--max-tier 1`): a real run
+to the first non-empty output. The launcher honestly reports blockers, so a wrong recipe
+fails here, not silently later.
+
+**Pass 2 — observable layer (grounded in the T1 output).** Only now, with a real
+`tier1_output` in hand, ground the observable layer against the actual output and the
+writer code:
+```bash
+python -m drafting.ground --project-root "<PROJECT_ROOT>" \
+  --out-dir "<WORK_DIR>/run" --tier1-output <the_real_output_file>
+```
+This reports the real column count + sample rows AND locates the source line that writes
+the file (the `<<`/`savetxt` record write reveals the column **order**). Derive
+`output_meaning`, `observable_locator`, and `extractors.py` from THAT — describe columns
+exactly as the writer emits them; compute physics (pT/phi/eta) from the momentum columns,
+never assume. Finally add a **GOLDEN** (`tests/test_pack_<model>_extractors.py`): a
+controlled sample whose expected values you reason out **independently** (physics), not by
+copying whatever the extractor returns — else the golden enshrines a bug instead of
+catching it. `tests/test_extractor_golden.py` then runs the extractor against it, and set
+`tier2_observable` + re-validate to **T2**.
+
+**Score the draft.** Compare a candidate pack against a hand-written reference with
+`python -m benchmark.pack_score --candidate <dir> --reference <model>` (the `extractor`
+dimension runs the candidate against the reference GOLDEN — objective). The four shipped
+packs are the ground truth (all score 1.0).

@@ -190,10 +190,17 @@ packs/
 │   └── extractors.py        # extract/fit observables (e.g. dNch/deta, v2)
 └── _template/               # empty scaffold for a new model
 
+drafting/                    # pack-authoring tools (outside the engine)
+└── ground.py                # ground the observable layer in a real T1 output + writer code
+benchmark/                   # pack-authoring tools (outside the engine)
+└── pack_score.py            # score a candidate pack vs a hand-written reference pack
 tests/                       # unittest suite (incl. the engine boundary guard)
 SKILL.md                     # the six-stage agent workflow
 agents/openai.yaml           # Codex manifest (SKILL.md is the portable core)
 ```
+
+`drafting/` and `benchmark/` are authoring aids used when adding a model; the engine does
+not import them, so the model-agnostic boundary (`test_boundary.py`) is unaffected.
 
 ---
 
@@ -217,6 +224,26 @@ Fill three files; the engine needs no change:
 `run_profiles[*].driver` must **not** contain a literal command — the command is
 derived from the checkout. The pack supplies only slot patterns and the values it
 legitimately owns; anything it can't name is left as a `<placeholder>` for the user.
+
+### Grounded two-pass authoring
+
+Author a pack in two passes so the observable layer is derived from a real run, not
+imagined (see SKILL.md → *Adding a model* for the full workflow):
+
+1. **Structure & run recipe first** — `manifest`, `param_meaning`, `param_constraints`,
+   `intent_rules`, and the `run_profiles.minimal` recipe (driver/command, build, prepare,
+   inputs, `tier1_output`). Validate to **T1** (`--max-tier 1`).
+2. **Observable layer from the T1 output** — run
+   `python -m drafting.ground --project-root <root> --out-dir <run> --tier1-output <file>`
+   to see the real columns AND the source line that writes them (the record write reveals
+   the column **order**). Derive `output_meaning`/`observable_locator`/`extractors.py` from
+   that, add a **GOLDEN** with independently-reasoned expected values
+   (`tests/test_pack_<model>_extractors.py`, enforced by `tests/test_extractor_golden.py`),
+   then validate to **T2**.
+
+Score a draft against a hand-written reference with
+`python -m benchmark.pack_score --candidate <dir> --reference <model>` (its `extractor`
+dimension is objective — it runs the candidate against the reference GOLDEN).
 
 ---
 
