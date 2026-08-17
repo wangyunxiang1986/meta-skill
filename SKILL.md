@@ -151,7 +151,10 @@ copying whatever the extractor returns — else the golden enshrines a bug inste
 catching it. `tests/test_extractor_golden.py` then runs the extractor against it, and set
 `tier2_observable` + re-validate to **T2**.
 
-**Score the draft.** Compare a candidate pack against a hand-written reference with
-`python -m benchmark.pack_score --candidate <dir> --reference <model>` (the `extractor`
-dimension runs the candidate against the reference GOLDEN — objective). The four shipped
-packs are the ground truth (all score 1.0).
+**Verify the extractor (not just its plausibility).** Recover the output column order
+from an independent source with `drafting.columns` (the C++ writer's `<<` chain or the
+file header), then check the extractor reads the right columns with
+`drafting.verify_extractor` — a discriminating probe whose expected value comes from the
+column truth, so a wrong-column parser is rejected even if it "passes T2". `drafting.gen_extractor`
+can synthesise the parser from that truth and refuse (hand off to a human) when a required
+field is unmapped. The final proof is a real run to **T2** with no blockers.

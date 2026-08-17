@@ -191,16 +191,17 @@ packs/
 └── _template/               # empty scaffold for a new model
 
 drafting/                    # pack-authoring tools (outside the engine)
-└── ground.py                # ground the observable layer in a real T1 output + writer code
-benchmark/                   # pack-authoring tools (outside the engine)
-└── pack_score.py            # score a candidate pack vs a hand-written reference pack
+├── ground.py                # ground the observable layer in a real T1 output + writer code
+├── columns.py               # recover output column order from writer `<<` chain / header
+├── verify_extractor.py      # reject a wrong-column extractor via a discriminating probe
+└── gen_extractor.py         # synthesise an extractor from the column truth, then verify
 tests/                       # unittest suite (incl. the engine boundary guard)
 SKILL.md                     # the six-stage agent workflow
 agents/openai.yaml           # Codex manifest (SKILL.md is the portable core)
 ```
 
-`drafting/` and `benchmark/` are authoring aids used when adding a model; the engine does
-not import them, so the model-agnostic boundary (`test_boundary.py`) is unaffected.
+`drafting/` holds authoring aids used when adding a model; the engine does not import
+them, so the model-agnostic boundary (`test_boundary.py`) is unaffected.
 
 ---
 
@@ -241,9 +242,11 @@ imagined (see SKILL.md → *Adding a model* for the full workflow):
    (`tests/test_pack_<model>_extractors.py`, enforced by `tests/test_extractor_golden.py`),
    then validate to **T2**.
 
-Score a draft against a hand-written reference with
-`python -m benchmark.pack_score --candidate <dir> --reference <model>` (its `extractor`
-dimension is objective — it runs the candidate against the reference GOLDEN).
+Verify the extractor reads the right columns (not just that it looks plausible):
+`drafting.columns` recovers the column order from an independent source and
+`drafting.verify_extractor` rejects a wrong-column parser via a discriminating probe;
+`drafting.gen_extractor` can synthesise it from that truth. The final proof is a real
+run to T2 with no blockers.
 
 ---
 

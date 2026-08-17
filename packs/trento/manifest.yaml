@@ -1,0 +1,6 @@
+name: trento
+match:
+  any_of:
+    - file_exists: src/collider.cxx
+    - file_exists: src/trento.cxx
+    - readme_contains: "TRENTO"

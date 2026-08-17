@@ -489,6 +489,19 @@ def readme_run_commands(readme_text: str) -> List[str]:
     return out[:20]
 
 
+_AUX_DIR_PARTS = {"test", "tests", "testing", "example", "examples", "demo", "demos",
+                  "benchmark", "benchmarks", "bench", "doc", "docs", "tools", "util",
+                  "utils", "script", "scripts", "sample", "samples"}
+
+
+def _is_auxiliary_path(rel_path: str) -> bool:
+    """True when a path lives under a test/example/benchmark/doc/tooling dir. Such a
+    ``main()`` is a helper, not the program's run driver, so it is demoted (only as a
+    tiebreak) when picking the primary entry. Purely structural -- names no model."""
+    parts = rel_path.replace("\\", "/").split("/")[:-1]      # dirs only, not the file
+    return any(p.lower() in _AUX_DIR_PARTS for p in parts)
+
+
 def primary_entrypoint(entries: List[Dict[str, object]],
                        readme_commands: Optional[List[str]] = None) -> Optional[Dict[str, object]]:
     """Pick the most likely run driver, by characteristic only (no model names).
@@ -510,7 +523,16 @@ def primary_entrypoint(entries: List[Dict[str, object]],
     argparse_any = [e for e in pool_source if e.get("cli_style") == "argparse"]
     for pool in (argv_cfg, argv_any, argparse_any):
         if pool:
-            return sorted(pool, key=lambda e: -len(e.get("argv_names", [])))[0]
+            # Prefer the real run driver: a main() under a test/example/benchmark dir
+            # is a helper, not the program's entry, so demote it FIRST -- even a
+            # helper that parses more argv must not outrank a real src/ entry that
+            # exposes none (e.g. a program using a C++ options library the scanner
+            # cannot read). Within the same aux class, prefer more argv names, then a
+            # stable path order. If EVERY candidate is auxiliary the demotion is a
+            # no-op, so nothing is lost.
+            return sorted(pool, key=lambda e: (_is_auxiliary_path(e["path"]),
+                                               -len(e.get("argv_names", [])),
+                                               e["path"]))[0]
     return pool_source[0]
 
 

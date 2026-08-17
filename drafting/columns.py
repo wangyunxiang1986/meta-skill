@@ -28,6 +28,9 @@ _COMMENT_PREFIX = ("//", "*", "#")
 
 def _clean_field(tok):
     tok = tok.strip()
+    # a leading unary minus is a sign, not part of the field name (a negative-record
+    # write like negativeLBT<<-P0[1] must still map to the field 'P0[1]').
+    tok = tok.lstrip("-").strip()
     # strip a trailing per-particle index like [i] so P[1][i] -> P[1]; keep inner [1]
     tok = re.sub(r"\[[A-Za-z_]\w*\]\s*$", "", tok)
     return tok

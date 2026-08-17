@@ -1,0 +1,98 @@
+description: "TRENTo: parametric initial-condition model for high-energy nuclear collisions. Compiled C++ (build/src/trento projectile projectile [n-events] -o <out>); samples nucleon positions and deposits reduced-thickness entropy, printing per-event properties (impact parameter, N_part, multiplicity, eccentricities e2..e5) to stdout and writing one 2D grid .dat per event."
+
+# TRENTo uses Boost.program_options (not argparse), so the structural scanner detects
+# no CLI params. Inject the real physical knobs here (from `trento --help`). The two
+# leading positionals are the projectile species; the third is the event count.
+param_meaning:
+  projectile: "碰撞核种 (p/d/Cu/Xe/Au/Pb/U/...); 命令给两个, 如 'Pb Pb'"
+  number-events: "生成的事件数 (第三个位置参数, 默认 1)"
+  reduced-thickness: "约化厚度参数 p (广义平均指数; p=0 对应几何平均, TRENTo 招牌参数)"
+  fluctuation: "gamma 涨落形状参数 k (每核子熵沉积的多重涨落)"
+  nucleon-width: "高斯核子宽度 w [fm]"
+  constit-width: "高斯组分宽度 v [fm] (亚核子结构; 默认同 nucleon-width)"
+  constit-number: "每个核子的组分数 m (亚核子涨落)"
+  cross-section: "非弹性核子-核子截面 sigma_NN [fm^2]"
+  normalization: "总体归一化因子 n"
+  grid-max: "输出网格半宽 [fm] (网格覆盖 [-grid-max, grid-max])"
+  grid-step: "输出网格步长 [fm]"
+  random-seed: "随机数种子 (默认按时间自动取)"
+  output: "输出路径 (-o); 目录则每事件写一个文本 .dat 网格, .h5 则写 HDF5"
+
+# Scanner detects 0 params for a Boost.program_options C++ code; inject the real knobs.
+pack_parameters:
+  - { name: projectile, default: "Pb Pb", source: "trento CLI (positional)" }
+  - { name: number-events, default: "1", source: "trento --help" }
+  - { name: reduced-thickness, default: "0", source: "trento --help (-p)" }
+  - { name: fluctuation, default: "1", source: "trento --help (-k)" }
+  - { name: nucleon-width, default: "0.5", source: "trento --help (-w)" }
+  - { name: cross-section, default: "6.4", source: "trento --help (-x)" }
+  - { name: normalization, default: "1", source: "trento --help (-n)" }
+  - { name: grid-max, default: "10.0", source: "trento --help" }
+  - { name: grid-step, default: "0.2", source: "trento --help" }
+
+# TRENTo's own outputs. Grounded in a real run: stdout event table + one .dat grid
+# per event (see references and drafting/ground.py output).
+pack_outputs:
+  - { file: "<n>.dat", source: "trento -o <dir> (one 2D entropy grid per event)" }
+
+output_meaning:
+  "<n>.dat": "单事件 2D 约化厚度/熵密度网格 (文本; 头部注释 '# event N', '# b/npart/mult/e2..e5', 随后 grid-max*2/grid-step 行每行同列数的网格值)"
+  "stdout_event_table": "每事件一行: 'id  b  npart  mult  e2  e3  e4  e5' (碰撞参数 b, 参与核子数 npart, 多重数 mult, 2-5 阶偏心率 en); 加 -q 关闭"
+
+# The extractor reads the per-event properties from the .dat file HEADERS (each grid
+# file carries '# mult = ...', '# e2 = ...' etc.), which is the same table stdout prints.
+observable_locator:
+  mult: { file: "0.dat" }        # event multiplicity (entropy proxy)
+  e2:   { file: "0.dat" }        # 2nd-order eccentricity (drives elliptic flow)
+
+intent_rules:
+  - match: ["初态", "生成初态", "trento", "run trento", "initial condition"]
+    plan: { input: projectile, extract: mult }
+  - match: ["偏心率", "eccentricity", "e2", "看椭圆度"]
+    plan: { extract: e2 }
+  - match: ["扫约化厚度", "scan p", "reduced thickness"]
+    plan: { scan_param: reduced-thickness, extract: e2 }
+
+run_profiles:
+  minimal:
+    # Command NOT engine-derivable: a compiled Boost.program_options binary with
+    # positional projectiles + flags. Supply it directly (documented command fallback).
+    # Uses the PREBUILT binary at build/src/trento; if absent the prepare cp fails and
+    # the launcher records a graceful blocker.
+    command:
+      - "./trento"
+      - "Pb"
+      - "Pb"
+      - "5"
+      - "-o"
+      - "{work}/out"
+    run_in: work
+    build: []
+    prepare:
+      - "mkdir -p {work}/out"
+      - "cp \"$(find {root} -path '*build*' -name trento -type f | head -1)\" ."
+    tier1_output: "0.dat"
+    tier2_observable: mult
+    needs: []
+
+param_constraints:
+  reduced-thickness:
+    range: [-1.0, 1.0]
+    note: "约化厚度 p; 常用 [-1,1], p=0 几何平均"
+  nucleon-width:
+    range: [0.2, 1.2]
+    note: "高斯核子宽度 fm"
+  cross-section:
+    range: [1.0, 20.0]
+    note: "sigma_NN fm^2 (随束流能量变化)"
+  number-events:
+    range: [1, 1000000]
+    note: "事件数"
+
+demos:
+  - title: "minimal Pb+Pb initial condition"
+    intent: "生成 5 个 Pb+Pb 事件的初态网格 + 事件属性 (mult, e2..e5)"
+    args: {projectile: "Pb Pb", number-events: "5"}
+  - title: "reduced-thickness scan point"
+    intent: "改 p (reduced-thickness) 看偏心率 e2 (初态几何新物理点)"
+    args: {reduced-thickness: "0.5"}

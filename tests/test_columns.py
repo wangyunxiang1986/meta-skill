@@ -21,6 +21,13 @@ class ColumnTruthTest(unittest.TestCase):
     def test_commented_write_is_ignored(self):
         self.assertEqual(columns.parse_cpp_stream_write("// f<<a<<b<<endl;"), [])
 
+    def test_leading_minus_is_a_sign_not_the_field_name(self):
+        # a negative-record write (URQMD/LBT negative.dat: neg<<-P0[1]<<...) must still
+        # map to the field 'P0[1]', so a unary minus is stripped from the token.
+        line = 'negativeLBT<<-LBT->P0[1][i]<<" "<<-LBT->P0[2][i]<<endl;'
+        self.assertEqual(columns.parse_cpp_stream_write(line),
+                         ["LBT->P0[1]", "LBT->P0[2]"])
+
     def test_header_named_oscar(self):
         h = "#!OSCAR2013 particle_lists t x y z mass p0 px py pz pdg ID charge"
         r = columns.column_truth(header_line=h)
